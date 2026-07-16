@@ -3,7 +3,7 @@ import client from './client'
 export interface KnowledgeNode {
   id: number
   name: string
-  node_type: 'time' | 'place' | 'organization' | 'topic' | 'source' | string
+  node_type: 'time' | 'place' | 'organization' | 'topic' | string
 }
 
 export interface RelatedActivity {
@@ -17,7 +17,6 @@ export interface RelatedActivity {
 export interface ActivityKnowledgeContext {
   nodes: KnowledgeNode[]
   related: RelatedActivity[]
-  source?: { name?: string; url?: string }
 }
 
 function arrayOf(value: unknown): unknown[] {
@@ -40,9 +39,8 @@ function relatedOf(value: any): RelatedActivity {
 export async function getActivityKnowledgeContext(id: number): Promise<ActivityKnowledgeContext> {
   const { data } = await client.get<any>(`/posters/${id}/related`)
   return {
-    nodes: arrayOf(data.nodes ?? data.knowledge_nodes ?? data.direct_nodes).map(nodeOf).filter((node) => node.name),
+    nodes: arrayOf(data.nodes ?? data.knowledge_nodes ?? data.direct_nodes).map(nodeOf).filter((node) => node.name && node.node_type !== 'source'),
     related: arrayOf(data.related ?? data.related_posters ?? data.items).map(relatedOf).filter((item) => item.id && item.title),
-    source: data.source ? { name: data.source.name, url: data.source.url ?? data.source.source_url } : undefined,
   }
 }
 

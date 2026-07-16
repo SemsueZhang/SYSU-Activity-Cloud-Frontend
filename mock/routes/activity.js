@@ -42,6 +42,23 @@ function resolveAttachments(user, attachments) {
   return { attachments: resolved }
 }
 
+function addRegisteredActivityToCalendar(user, activity) {
+  const events = CALENDAR_EVENTS[user.id] ||= []
+  if (events.some((event) => event.activity_id === activity.id)) return
+  const eventTime = activity.event_time || ''
+  events.push({
+    activity_id: activity.id,
+    date: eventTime.slice(0, 10),
+    time: eventTime.slice(11, 16) || '09:00',
+    title: activity.title,
+    type: 'activity',
+  })
+}
+
+function removeRegisteredActivityFromCalendar(user, activityId) {
+  CALENDAR_EVENTS[user.id] = (CALENDAR_EVENTS[user.id] || []).filter((event) => event.activity_id !== activityId)
+}
+
 export default [
   {
     method: 'GET', path: '/api/activities/mine', handler: async (req) => {
@@ -50,9 +67,18 @@ export default [
       const url = new URL(req.url, `http://localhost:${PORT}`)
       const status = url.searchParams.get('status')
       const keyword = url.searchParams.get('q') || ''
-      let items = ACTIVITIES.filter((item) => user.role === 'admin' || item.created_by === user.id)
+      let items = ACTIVITIES.filter((item) => item.created_by === user.id)
       if (status) items = items.filter((item) => item.status === status)
       if (keyword) items = items.filter((item) => item.title.includes(keyword))
+      return page(items, url)
+    },
+  },
+  {
+    method: 'GET', path: '/api/activities/registered', handler: async (req) => {
+      const user = getCurrentUser(req)
+      if (!user) return { __status: 401, message: '请先登录' }
+      const url = new URL(req.url, `http://localhost:${PORT}`)
+      const items = ACTIVITIES.filter((item) => (USER_STATE.registrations[item.id] || []).includes(user.id))
       return page(items, url)
     },
   },
@@ -129,7 +155,6 @@ export default [
         meta: activity.meta || { views: 128, registrations: 36 },
         favorite: Boolean(user && (USER_STATE.favorites[user.id] || []).includes(activity.id)),
         registered: Boolean(user && (USER_STATE.registrations[activity.id] || []).includes(user.id)),
-        in_calendar: Boolean(user && (CALENDAR_EVENTS[user.id] || []).some((event) => event.activity_id === activity.id)),
         source_name: activity.source_name || activity.organizer || '校园公开信息源',
         source_url: activity.source_url || 'https://www.sysu.edu.cn',
       }
@@ -145,10 +170,29 @@ export default [
       if (!activity || activity.status !== 'published') return { __status: 404, message: 'activity not found' }
       const registeredUsers = USER_STATE.registrations[activity.id] ||= []
       activity.meta = activity.meta || { views: 0, registrations: 0 }
-      if (registeredUsers.includes(user.id)) return { success: true, already_registered: true, registrations: activity.meta.registrations || 0 }
+      if (registeredUsers.includes(user.id)) {
+        addRegisteredActivityToCalendar(user, activity)
+        return { success: true, already_registered: true, registrations: activity.meta.registrations || 0 }
+      }
       registeredUsers.push(user.id)
       activity.meta.registrations = (activity.meta.registrations || 0) + 1
+      addRegisteredActivityToCalendar(user, activity)
       return { success: true, already_registered: false, registrations: activity.meta.registrations }
+    },
+  },
+  {
+    method: 'DELETE', path: '/api/activities/:id/register', handler: async (req) => {
+      const user = getCurrentUser(req)
+      const activity = ACTIVITIES.find((item) => item.id === Number(req.params.id))
+      if (!user) return { __status: 401, message: '请先登录' }
+      if (!activity) return { __status: 404, message: 'activity not found' }
+      const registeredUsers = USER_STATE.registrations[activity.id] ||= []
+      const wasRegistered = registeredUsers.includes(user.id)
+      USER_STATE.registrations[activity.id] = registeredUsers.filter((userId) => userId !== user.id)
+      activity.meta = activity.meta || { views: 0, registrations: 0 }
+      if (wasRegistered) activity.meta.registrations = Math.max((activity.meta.registrations || 0) - 1, 0)
+      removeRegisteredActivityFromCalendar(user, activity.id)
+      return { success: true, registrations: activity.meta.registrations || 0 }
     },
   },
   {

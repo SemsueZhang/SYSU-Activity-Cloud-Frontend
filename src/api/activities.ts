@@ -32,9 +32,6 @@ export interface ActivityDetail extends Activity {
   }
   favorite?: boolean
   registered?: boolean
-  in_calendar?: boolean
-  source_url?: string
-  source_name?: string
 }
 
 export interface ActivityForm {
@@ -73,12 +70,20 @@ export function registerForActivity(id: number) {
   return client.post<{ success: boolean; registrations: number; already_registered: boolean }>(`/activities/${id}/register`)
 }
 
+export function unregisterFromActivity(id: number) {
+  return client.delete<{ success: boolean; registrations: number }>(`/activities/${id}/register`)
+}
+
 export function setActivityFavorite(id: number, favorite: boolean) {
   return client.request<{ favorite: boolean }>({ method: favorite ? 'POST' : 'DELETE', url: `/activities/${id}/favorite` })
 }
 
 export function listMyActivities(params?: ActivityListParams) {
   return client.get<ApiPage<Activity>>('/activities/mine', { params })
+}
+
+export function listRegisteredActivities(params?: Pick<ActivityListParams, 'page' | 'per_page'>) {
+  return client.get<ApiPage<Activity>>('/activities/registered', { params })
 }
 
 export function createActivity(data: ActivityForm) {

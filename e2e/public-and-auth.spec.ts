@@ -48,19 +48,35 @@ test('home search, email registration, and enrollment idempotency are usable', a
   await signIn(page, username, 'test123456')
   const result = await page.evaluate(async () => {
     const token = localStorage.getItem('token')
-    const request = () => fetch('/api/activities/1/register', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).then((response) => response.json())
-    return { first: await request(), second: await request() }
+    const headers = { Authorization: `Bearer ${token}` }
+    const request = () => fetch('/api/activities/1/register', { method: 'POST', headers }).then((response) => response.json())
+    const first = await request()
+    const second = await request()
+    const registeredAfter = await fetch('/api/activities/registered?per_page=100', { headers }).then((response) => response.json())
+    const calendarAfter = await fetch('/api/calendar/events?month=2026-06', { headers }).then((response) => response.json())
+    const cancelled = await fetch('/api/activities/1/register', { method: 'DELETE', headers }).then((response) => response.json())
+    const registeredRemoved = await fetch('/api/activities/registered?per_page=100', { headers }).then((response) => response.json())
+    const calendarRemoved = await fetch('/api/calendar/events?month=2026-06', { headers }).then((response) => response.json())
+    return { first, second, registeredAfter, calendarAfter, cancelled, registeredRemoved, calendarRemoved }
   })
   expect(result.first.already_registered).toBe(false)
   expect(result.second.already_registered).toBe(true)
   expect(result.second.registrations).toBe(result.first.registrations)
+  expect(result.registeredAfter.items.some((item: { id: number }) => item.id === 1)).toBe(true)
+  expect(result.calendarAfter.events.some((item: { activity_id?: number }) => item.activity_id === 1)).toBe(true)
+  expect(result.cancelled.registrations).toBe(result.first.registrations - 1)
+  expect(result.registeredRemoved.items.some((item: { id: number }) => item.id === 1)).toBe(false)
+  expect(result.calendarRemoved.events.some((item: { activity_id?: number }) => item.activity_id === 1)).toBe(false)
 })
 
-test('publisher can sign in and access own activities', async ({ page }) => {
+test('publisher can access registered and created activities on separate pages', async ({ page }) => {
   await signInAsPublisher(page)
   await expect(page).toHaveURL('/')
   await page.goto('/my/activities')
-  await expect(page.getByRole('heading', { name: '我的发布' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '我报名的活动' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '我创建的活动' })).toHaveCount(0)
+  await page.goto('/my/created/rejected')
+  await expect(page.getByRole('heading', { name: '我创建的活动 · 未通过' })).toBeVisible()
   await expect(page.getByText('秋季社团招新嘉年华')).toBeVisible()
 })
 
@@ -84,22 +100,17 @@ test('mock contract rejects private activity reads, unauthorized export, and cro
   expect(status).toBe(403)
 })
 
-test('knowledge context, calendar collection and ICS export follow the backend resource contract', async ({ page }) => {
+test('knowledge context and ICS export follow the backend resource contract', async ({ page }) => {
   await signInAsPublisher(page)
   const result = await page.evaluate(async () => {
-    const token = localStorage.getItem('token') || ''
-    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-    const [related, calendar, ics] = await Promise.all([
+    const [related, ics] = await Promise.all([
       fetch('/api/posters/1/related'),
-      fetch('/api/calendar/events', { method: 'POST', headers, body: JSON.stringify({ poster_id: 1 }) }),
       fetch('/api/posters/1/ics'),
     ])
-    return { related: { status: related.status, body: await related.json() }, calendar: { status: calendar.status, body: await calendar.json() }, ics: { status: ics.status, type: ics.headers.get('content-type') } }
+    return { related: { status: related.status, body: await related.json() }, ics: { status: ics.status, type: ics.headers.get('content-type') } }
   })
   expect(result.related.status).toBe(200)
   expect(result.related.body.nodes.length).toBeGreaterThan(0)
-  expect(result.calendar.status).toBe(200)
-  expect(result.calendar.body.event.activity_id).toBe(1)
   expect(result.ics).toMatchObject({ status: 200, type: expect.stringContaining('text/calendar') })
 })
 
@@ -113,7 +124,7 @@ test('publisher can submit a draft created in the UI and an admin can approve it
   await page.getByText('讲座', { exact: true }).last().click()
   await editor.locator('textarea').nth(1).fill('这是用于验证发布与审核闭环的活动正文。')
   await page.getByRole('button', { name: '提交审核' }).click()
-  await expect(page).toHaveURL('/my/activities')
+  await expect(page).toHaveURL('/my/created/reviewing')
   await expect(page.getByText(title)).toBeVisible()
 
   await page.evaluate(() => localStorage.clear())
@@ -166,7 +177,7 @@ test('public sorting, rejection feedback, and home failure state are visible', a
   })
   await page.evaluate(() => localStorage.clear())
   await signInAsPublisher(page)
-  await page.goto('/my/activities')
+  await page.goto('/my/created/rejected')
   await expect(page.getByText('请补充场地审批材料')).toBeVisible()
 
   await page.unrouteAll({ behavior: 'wait' })

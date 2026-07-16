@@ -15,25 +15,14 @@ export function useHomePage() {
   const router = useRouter()
 
   const hotActivities = ref<Activity[]>([])
-  const recentActivities = ref<Activity[]>([])
   const activityTypeList = ['讲座', '晚会', '竞赛', '论坛', '展览', '招聘', '体育', '其他']
   const loading = ref(true)
   const error = ref('')
   const scheduleError = ref('')
   const searchKeyword = ref('')
 
-  // ---- 轮播 ----
   const currentHotIndex = ref(0)
-  const isHotCarouselPaused = ref(false)
   let hotTimer: ReturnType<typeof setInterval> | null = null
-
-  function startHotCarousel() {
-    stopHotCarousel()
-    if (hotActivities.value.length < 2 || isHotCarouselPaused.value || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    hotTimer = setInterval(() => {
-      currentHotIndex.value = (currentHotIndex.value + 1) % hotActivities.value.length
-    }, 4000)
-  }
 
   function stopHotCarousel() {
     if (hotTimer) {
@@ -42,24 +31,37 @@ export function useHomePage() {
     }
   }
 
-  function toggleHotCarousel() {
-    isHotCarouselPaused.value = !isHotCarouselPaused.value
-    if (isHotCarouselPaused.value) stopHotCarousel()
-    else startHotCarousel()
+  function startHotCarousel() {
+    stopHotCarousel()
+    if (hotActivities.value.length < 2) return
+    hotTimer = setInterval(() => {
+      currentHotIndex.value = (currentHotIndex.value + 1) % hotActivities.value.length
+    }, 4000)
+  }
+
+  function selectHotActivity(index: number) {
+    currentHotIndex.value = index
+    startHotCarousel()
   }
 
   // ---- 左侧导航 ----
-  const activeNav = ref('all')
+  const activeNav = ref('hot')
 
   function selectNav(key: string) {
     activeNav.value = key
     if (key === 'all') { router.push('/activities'); return }
     if (key === 'my') {
       if (!auth.isLoggedIn) {
-        router.push({ path: '/auth/login', query: { redirect: '/profile' } })
+        router.push({ path: '/auth/login', query: { redirect: '/my/activities' } })
         return
       }
-      router.push(auth.isPublisher ? '/my/activities' : '/profile')
+      router.push('/my/activities')
+      return
+    }
+    if (key === 'created') {
+      if (!auth.isLoggedIn) { router.push({ path: '/auth/login', query: { redirect: '/my/created/approved' } }); return }
+      if (!auth.isPublisher) { ElMessage.warning('只有发布者和管理员可以管理创建的活动'); return }
+      router.push('/my/created/approved')
       return
     }
     if (key === 'create') {
@@ -142,25 +144,30 @@ export function useHomePage() {
     }
   }
 
-  // ---- 分类筛选 ----
   const selectedCategoryId = ref<string | null>('recent')
   const categoryActivities = ref<Activity[]>([])
+  const categoryLoading = ref(false)
 
   async function fetchCategoryActivities() {
-    if (!selectedCategoryId.value || selectedCategoryId.value === 'recent') {
-      categoryActivities.value = [...recentActivities.value].sort(
-        (a: Activity, b: Activity) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      )
+    if (selectedCategoryId.value === 'recent' || !selectedCategoryId.value) {
+      categoryActivities.value = hotActivities.value
       return
     }
-    categoryActivities.value = [...recentActivities.value]
-      .filter(p => p.activity_type === selectedCategoryId.value)
-      .sort((a: Activity, b: Activity) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    categoryLoading.value = true
+    try {
+      const { data } = await listActivities({ status: 'published', activity_type: selectedCategoryId.value, per_page: 6 })
+      categoryActivities.value = [...(data.items || [])].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+    } catch {
+      categoryActivities.value = []
+      ElMessage.error('该类别活动加载失败')
+    } finally {
+      categoryLoading.value = false
+    }
   }
 
-  function selectCategory(id: string | null) {
-    selectedCategoryId.value = id
-    fetchCategoryActivities()
+  function selectCategory(category: string | null) {
+    selectedCategoryId.value = category
+    void fetchCategoryActivities()
   }
 
   // ---- 数据获取 ----
@@ -168,17 +175,11 @@ export function useHomePage() {
     loading.value = true
     error.value = ''
     try {
-      const [hotRes, recentRes] = await Promise.all([
-        listActivities({ status: 'published', per_page: 6 }),
-        listActivities({ per_page: 6 }),
-      ])
+      const hotRes = await listActivities({ status: 'published', per_page: 6 })
       hotActivities.value = (hotRes.data?.items || []).sort(
         (a: Activity, b: Activity) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       )
-      recentActivities.value = (recentRes.data?.items || []).sort(
-        (a: Activity, b: Activity) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      )
-      categoryActivities.value = recentActivities.value
+      if (selectedCategoryId.value === 'recent') categoryActivities.value = hotActivities.value
     } catch (caught: any) { error.value = caught?.response?.data?.message || '活动数据加载失败' }
     finally { loading.value = false }
   }
@@ -195,7 +196,7 @@ export function useHomePage() {
   }
 
   function goActivityDetail(id: number) {
-    router.push({ path: `/activity/${id}`, query: { source: 'home' } })
+    router.push(`/activity/${id}`)
   }
 
   function handleSearch() {
@@ -207,9 +208,9 @@ export function useHomePage() {
 
   const currentYearLabel = new Date().getFullYear()
 
-  watch(hotActivities, (val) => {
+  watch(hotActivities, (activities) => {
     currentHotIndex.value = 0
-    if (val.length > 0) startHotCarousel()
+    if (activities.length > 1) startHotCarousel()
     else stopHotCarousel()
   })
   watch([currentYear, currentMonth], fetchSchedule)
@@ -218,15 +219,14 @@ export function useHomePage() {
     fetchSchedule()
   })
   onUnmounted(stopHotCarousel)
-
   return {
     auth, router,
-    hotActivities, recentActivities, activityTypeList, loading, error, scheduleError, searchKeyword,
-    currentHotIndex, isHotCarouselPaused, startHotCarousel, stopHotCarousel, toggleHotCarousel,
+    hotActivities, activityTypeList, loading, error, scheduleError, searchKeyword,
+    currentHotIndex, selectHotActivity,
     activeNav, selectNav,
     currentYear, currentMonth, selectedDate, weekDays,
     calendarDays, prevMonth, nextMonth, selectDate, selectedScheduleItems,
-    selectedCategoryId, categoryActivities, fetchCategoryActivities, selectCategory,
+    selectedCategoryId, categoryActivities, categoryLoading, fetchCategoryActivities, selectCategory,
     fetchData, fetchSchedule, formatTime, formatDate, goActivityDetail, handleSearch, handleLogout, currentYearLabel,
   }
 }

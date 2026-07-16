@@ -9,12 +9,12 @@ import FooterBar from '@/components/FooterBar.vue'
 
 const {
   auth, router,
-  hotActivities, recentActivities, activityTypeList, loading, error, scheduleError, searchKeyword,
-  currentHotIndex, isHotCarouselPaused, startHotCarousel, toggleHotCarousel,
+  hotActivities, activityTypeList, loading, error, scheduleError, searchKeyword,
+  currentHotIndex, selectHotActivity,
   activeNav, selectNav,
   currentYear, currentMonth, selectedDate, weekDays,
   calendarDays, prevMonth, nextMonth, selectDate, selectedScheduleItems,
-  selectedCategoryId, categoryActivities, fetchCategoryActivities, selectCategory,
+  selectedCategoryId, categoryActivities, categoryLoading, selectCategory,
   fetchData, fetchSchedule, formatTime, goActivityDetail, handleSearch, handleLogout, currentYearLabel
 } = useHomePage()
 </script>
@@ -39,6 +39,7 @@ const {
         :active-nav="activeNav"
         :activity-type-list="activityTypeList"
         :selected-category-id="selectedCategoryId"
+        :is-publisher="auth.isPublisher"
         @select-nav="selectNav"
         @select-category="selectCategory"
       />
@@ -54,7 +55,8 @@ const {
               查看全部 <el-icon><ArrowRight /></el-icon>
             </el-button>
           </div>
-          <article v-if="hotActivities.length > 0" class="hot-carousel" aria-label="热门活动轮播">
+          <template v-if="hotActivities.length > 0">
+          <article class="hot-carousel" tabindex="0" role="link" :aria-label="`查看热门活动：${hotActivities[currentHotIndex].title}`" @click="goActivityDetail(hotActivities[currentHotIndex].id)" @keyup.enter="goActivityDetail(hotActivities[currentHotIndex].id)" @keydown.space.prevent="goActivityDetail(hotActivities[currentHotIndex].id)">
             <div class="hc-card">
               <div class="hc-badge">
                 <el-tag
@@ -74,83 +76,42 @@ const {
                 <span><el-icon size="14"><Location /></el-icon> {{ hotActivities[currentHotIndex].location || '待定' }}</span>
               </div>
             </div>
-            <div class="hc-dots" v-if="hotActivities.length > 1">
-              <button
-                v-for="(_, i) in hotActivities" :key="i"
-                class="hc-dot" :class="{ active: i === currentHotIndex }" :aria-label="`显示第 ${i + 1} 条热门活动`" :aria-current="i === currentHotIndex ? 'true' : undefined"
-                @click.stop="currentHotIndex = i; startHotCarousel()"
-              ></button>
-            </div>
-            <div class="hc-actions"><el-button type="primary" @click="goActivityDetail(hotActivities[currentHotIndex].id)">查看活动</el-button><el-button v-if="hotActivities.length > 1" text @click="toggleHotCarousel">{{ isHotCarouselPaused ? '恢复轮播' : '暂停轮播' }}</el-button></div>
           </article>
+          <div v-if="hotActivities.length > 1" class="hc-dots" aria-label="热门活动切换">
+            <button v-for="(_, index) in hotActivities" :key="index" type="button" class="hc-dot" :class="{ active: index === currentHotIndex }" :aria-label="`显示第 ${index + 1} 条热门活动`" :aria-current="index === currentHotIndex ? 'true' : undefined" @click="selectHotActivity(index)"></button>
+          </div>
+          </template>
           <div v-else class="hot-empty">
             <el-empty :image-size="80" description="暂无活动" />
           </div>
         </div>
 
-        <div class="category-scroll" v-loading="loading">
-          <template v-if="loading">
-            <section class="content-section">
-              <div class="skeleton-title"></div>
-              <div class="skeleton-scroll">
-                <div v-for="i in 4" :key="i" class="skeleton-card-scroll"></div>
-              </div>
-            </section>
-            <section class="content-section">
-              <div class="skeleton-title"></div>
-              <div class="skeleton-grid">
-                <div v-for="i in 4" :key="i" class="skeleton-card"></div>
-              </div>
-            </section>
-          </template>
-          <section v-else-if="error" class="home-error"><el-result icon="error" title="活动加载失败" :sub-title="error"><template #extra><el-button type="primary" @click="fetchData">重试</el-button></template></el-result></section>
-          <template v-else>
-            <section class="content-section" id="section-categories">
-              <div class="section-header">
-                <h2 class="section-title">
-                  <el-icon class="section-title-icon"><Collection /></el-icon>
-                  活动分类
-                </h2>
-              </div>
-              <div class="category-tabs">
-                <el-radio-group v-model="selectedCategoryId" @change="fetchCategoryActivities">
-                  <el-radio-button value="recent">最近</el-radio-button>
-                  <el-radio-button v-for="cat in activityTypeList" :key="cat" :value="cat">
-                    {{ cat }}
-                  </el-radio-button>
-                </el-radio-group>
-              </div>
-            </section>
-            <div class="cat-scroll-body">
-              <div class="cat-activity-list" v-if="categoryActivities.length > 0">
-                <button v-for="p in categoryActivities" :key="p.id" type="button" class="cat-activity-item" @click="goActivityDetail(p.id)">
-                  <div class="cpi-left">
-                    <div class="cpi-title">{{ p.title }}</div>
-                    <div class="cpi-meta">
-                      <span><el-icon size="12"><Location /></el-icon> {{ p.location || '待定' }}</span>
-                      <span><el-icon size="12"><Calendar /></el-icon> {{ formatTime(p.event_time) }}</span>
-                    </div>
-                  </div>
-                  <div class="cpi-tag">
-                    <el-tag size="small" type="success" effect="plain" round>
-                      {{ p.activity_type || '活动' }}
-                    </el-tag>
-                  </div>
-                </button>
-              </div>
-              <div v-else class="cat-activity-empty">
-                <el-empty :image-size="80" description="该类别暂无活动" />
-              </div>
+        <section v-if="!loading && !error" id="section-categories" class="category-scroll">
+          <div class="section-header">
+            <h2 class="section-title"><el-icon class="section-title-icon"><Collection /></el-icon>类别热门活动</h2>
+          </div>
+          <div class="category-tabs">
+            <el-radio-group v-model="selectedCategoryId" @change="selectCategory">
+              <el-radio-button value="recent">全部热门</el-radio-button>
+              <el-radio-button v-for="category in activityTypeList" :key="category" :value="category">{{ category }}</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="cat-scroll-body" v-loading="categoryLoading">
+            <div v-if="categoryActivities.length" class="cat-activity-list">
+              <button v-for="activity in categoryActivities" :key="activity.id" type="button" class="cat-activity-item" @click="goActivityDetail(activity.id)">
+                <div class="cpi-left"><div class="cpi-title">{{ activity.title }}</div><div class="cpi-meta"><span><el-icon size="12"><Location /></el-icon>{{ activity.location || '地点待定' }}</span><span><el-icon size="12"><Calendar /></el-icon>{{ formatTime(activity.event_time) }}</span></div></div>
+                <el-tag size="small" type="success" effect="plain" round>{{ activity.activity_type || '活动' }}</el-tag>
+              </button>
             </div>
-            <section class="content-section" v-if="hotActivities.length === 0 && recentActivities.length === 0">
-              <div class="empty-state">
-                <el-empty description="暂无活动数据，请稍后再来">
-                  <el-button type="primary" @click="fetchData">刷新</el-button>
-                </el-empty>
-              </div>
-            </section>
-          </template>
-        </div>
+            <el-empty v-else-if="!categoryLoading" :image-size="80" description="该类别暂无热门活动" />
+          </div>
+        </section>
+
+        <section v-if="loading" class="content-section loading-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-scroll"><div v-for="i in 2" :key="i" class="skeleton-card-scroll"></div></div>
+        </section>
+        <section v-else-if="error" class="home-error"><el-result icon="error" title="活动加载失败" :sub-title="error"><template #extra><el-button type="primary" @click="fetchData">重试</el-button></template></el-result></section>
       </main>
 
       <aside class="side-right">
@@ -318,6 +279,7 @@ const {
   padding: 28px 32px 20px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04);
   border-left: 4px solid #27a66b;
+  cursor: pointer;
   transition: transform 0.25s ease, box-shadow 0.25s ease;
   position: relative;
 }
@@ -326,6 +288,13 @@ const {
   transform: translateY(-2px);
   box-shadow: 0 8px 28px rgba(13, 94, 60, 0.08);
 }
+
+.hot-carousel:focus-visible { outline: 3px solid #27a66b; outline-offset: 3px; }
+
+.hc-dots { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
+.hc-dot { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #d0d0d0; cursor: pointer; transition: all .2s; }
+.hc-dot.active { width: 24px; border-radius: 4px; background: #27a66b; }
+.hc-dot:hover,.hc-dot:focus-visible { background: #1f8d59; outline: none; }
 
 .hot-empty {
   display: flex; align-items: center; justify-content: center;
@@ -349,17 +318,6 @@ const {
 
 .hc-meta { display: flex; gap: 20px; font-size: 13px; color: #909399; flex-wrap: wrap; }
 .hc-meta span { display: flex; align-items: center; gap: 4px; }
-
-.hc-dots { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
-
-.hc-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #d0d0d0; cursor: pointer; transition: all 0.25s; border: 0; padding: 0;
-}
-
-.hc-dot.active { background: #27a66b; width: 24px; border-radius: 4px; }
-.hc-dot:hover { background: #27a66b; }
-.hc-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
 
 /* ---- 分类标签 ---- */
 .category-tabs {

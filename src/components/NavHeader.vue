@@ -75,10 +75,13 @@ defineEmits<{
 }
 
 .nav-brand-title {
-  font-size: 28px;
-  font-weight: 800;
+  font-family: "Arial Rounded MT Bold", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  font-size: 27px;
+  font-weight: 700;
   color: #fff;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
+  line-height: 1;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
 }
 
 .nav-actions {
@@ -115,7 +118,8 @@ defineEmits<{
   font-size: 18px;
   font-weight: 600;
 }
-.nav-profile,.nav-register { color: rgb(255 255 255 / 90%) !important; }
+.nav-profile,.nav-register { color: #fff !important; font-weight: 600; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }
+.nav-profile:hover,.nav-register:hover,.nav-profile:focus-visible,.nav-register:focus-visible { color: #dff8e9 !important; }
 
 @media (max-width: 768px) {
   .nav-brand-title { font-size: 22px; }

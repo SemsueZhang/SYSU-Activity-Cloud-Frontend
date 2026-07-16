@@ -15,43 +15,45 @@
     </nav>
 
     <div class="side-divider"></div>
-    <div class="side-section-title">分类入口</div>
+    <div class="side-section-title">活动类别</div>
     <div class="side-categories">
       <button
-        v-for="cat in activityTypeList.slice(0, 6)"
-        :key="cat"
+        v-for="category in activityTypeList"
+        :key="category"
         type="button"
         class="side-cat-item"
-        :class="{ active: selectedCategoryId === cat }"
-        @click="$emit('selectCategory', cat)"
+        :class="{ active: selectedCategoryId === category }"
+        @click="$emit('selectCategory', category)"
       >
         <span class="side-cat-dot"></span>
-        <span>{{ cat }}</span>
+        <span>{{ category }}</span>
       </button>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Grid, TrendCharts, Collection, Star, Plus } from '@element-plus/icons-vue'
 
-const navItems = [
-  { key: 'all', label: '全部活动', icon: Grid },
-  { key: 'hot', label: '热门推荐', icon: TrendCharts },
-  { key: 'categories', label: '按类别', icon: Collection },
-  { key: 'my', label: '我的活动', icon: Star },
-  { key: 'create', label: '创建活动', icon: Plus },
-]
-
-defineProps<{
+const props = defineProps<{
   activeNav: string
   activityTypeList: string[]
   selectedCategoryId: string | null
+  isPublisher: boolean
 }>()
+
+const navItems = computed(() => [
+  { key: 'hot', label: '热门活动', icon: TrendCharts },
+  { key: 'all', label: '全部活动', icon: Grid },
+  { key: 'my', label: '我的报名', icon: Star },
+  ...(props.isPublisher ? [{ key: 'created', label: '我的创建', icon: Collection }] : []),
+  { key: 'create', label: '创建活动', icon: Plus },
+])
 
 defineEmits<{
   (e: 'selectNav', key: string): void
-  (e: 'selectCategory', cat: string): void
+  (e: 'selectCategory', category: string): void
 }>()
 </script>
 
@@ -108,62 +110,12 @@ defineEmits<{
   font-size: 18px;
 }
 
-.side-divider {
-  height: 1px;
-  background: #f0f0f0;
-  margin: 12px 16px;
-}
-
-.side-section-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #b0b0b0;
-  padding: 0 16px 8px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.side-categories {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 8px;
-}
-
-.side-cat-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #606266;
-  transition: all 0.2s;
-  border: 0;
-  background: transparent;
-  width: 100%;
-  text-align: left;
-}
-
-.side-cat-item:hover {
-  background: #f0f9f4;
-  color: #0d5e3c;
-}
-
-.side-cat-item.active {
-  background: #e8f5e9;
-  color: #0d5e3c;
-  font-weight: 600;
-}
-
-.side-cat-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: #27a66b;
-}
+.side-divider { height: 1px; background: #d0ede0; margin: 14px 16px; }
+.side-section-title { padding: 0 16px 8px; color: #5f7a6b; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+.side-categories { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 16px; }
+.side-cat-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 16px; border: 0; border-radius: 10px; background: transparent; color: #606266; cursor: pointer; font-size: 13px; text-align: left; transition: all .2s; }
+.side-cat-item:hover,.side-cat-item.active { background: #e8f5e9; color: #0d5e3c; font-weight: 600; }
+.side-cat-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: #27a66b; }
 
 @media (max-width: 768px) {
   .side-left { display: none; }

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import AppShell from '@/components/AppShell.vue'
 import ActivityHeader from '@/components/activity/ActivityHeader.vue'
 import ActivityMeta from '@/components/activity/ActivityMeta.vue'
 import ActivityBody from '@/components/activity/ActivityBody.vue'
-import { getActivityById, registerForActivity, setActivityFavorite, type ActivityDetail as ActivityDetailType } from '@/api/activities'
+import { getActivityById, registerForActivity, setActivityFavorite, unregisterFromActivity, type ActivityDetail as ActivityDetailType } from '@/api/activities'
 import { getActivityKnowledgeContext, subscribeToKnowledgeNode, type ActivityKnowledgeContext } from '@/api/knowledge'
-import { addActivityToCalendar, downloadActivityIcs, removeActivityFromCalendar } from '@/api/calendar'
+import { downloadActivityIcs } from '@/api/calendar'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -20,27 +20,13 @@ const detail = ref<ActivityDetailType | null>(null)
 const registering = ref(false)
 const favorite = ref(false)
 const registered = ref(false)
-const inCalendar = ref(false)
-const calendarBusy = ref(false)
 const context = ref<ActivityKnowledgeContext>({ nodes: [], related: [] })
 let requestVersion = 0
 
 const activityId = computed(() => Number(route.params.id))
-const sourceLabel = computed(() => {
-  const value = route.query?.source
-  return typeof value === 'string' && value.trim() ? value : ''
-})
 const redirectTarget = computed(() => {
   const value = route.query?.redirect
   return typeof value === 'string' && value.trim() ? value : ''
-})
-const sourceUrl = computed(() => {
-  const value = context.value.source?.url || detail.value?.source_url
-  if (!value) return ''
-  try {
-    const url = new URL(value)
-    return ['http:', 'https:'].includes(url.protocol) ? url.href : ''
-  } catch { return '' }
 })
 
 async function fetchDetail() {
@@ -50,14 +36,12 @@ async function fetchDetail() {
   context.value = { nodes: [], related: [] }
   favorite.value = false
   registered.value = false
-  inCalendar.value = false
   try {
     const res = await getActivityById(activityId.value)
     if (version !== requestVersion) return
     detail.value = res.data || null
     favorite.value = Boolean(detail.value?.favorite)
     registered.value = Boolean(detail.value?.registered)
-    inCalendar.value = Boolean(detail.value?.in_calendar)
     getActivityKnowledgeContext(activityId.value).then((value) => {
       if (version === requestVersion) context.value = value
     }).catch(() => { /* the detail stays usable without related knowledge */ })
@@ -72,11 +56,24 @@ async function fetchDetail() {
   }
 }
 
-async function register() {
+async function toggleRegistration() {
   if (!detail.value) return
   if (!auth.isLoggedIn) { router.push({ path: '/auth/login', query: { redirect: route.fullPath } }); return }
   registering.value = true
-  try { const { data } = await registerForActivity(detail.value.id); detail.value.meta = { ...(detail.value.meta || { views: 0, registrations: 0 }), registrations: data.registrations }; registered.value = true; ElMessage.success(data.already_registered ? '你已报名该活动' : '报名成功') } catch { /* interceptor handles request errors */ } finally { registering.value = false }
+  try {
+    if (registered.value) {
+      await ElMessageBox.confirm('取消报名后，该活动也会从你的日历中移除。确认取消？', '取消报名', { type: 'warning', confirmButtonText: '确认取消', cancelButtonText: '保留报名' })
+      const { data } = await unregisterFromActivity(detail.value.id)
+      detail.value.meta = { ...(detail.value.meta || { views: 0, registrations: 0 }), registrations: data.registrations }
+      registered.value = false
+      ElMessage.success('已取消报名并从日历移除')
+    } else {
+      const { data } = await registerForActivity(detail.value.id)
+      detail.value.meta = { ...(detail.value.meta || { views: 0, registrations: 0 }), registrations: data.registrations }
+      registered.value = true
+      ElMessage.success(data.already_registered ? '你已报名该活动，日历已同步' : '报名成功，已加入日历')
+    }
+  } catch { /* interceptor handles request errors and confirmation cancellation */ } finally { registering.value = false }
 }
 async function toggleFavorite() {
   if (!detail.value) return
@@ -86,15 +83,6 @@ async function toggleFavorite() {
 async function share() {
   const url = window.location.href
   try { if (navigator.share) await navigator.share({ title: detail.value?.title, url }); else { await navigator.clipboard.writeText(url); ElMessage.success('活动链接已复制') } } catch { /* user cancelled or clipboard is unavailable */ }
-}
-async function toggleCalendar() {
-  if (!detail.value) return
-  if (!auth.isLoggedIn) { router.push({ path: '/auth/login', query: { redirect: route.fullPath } }); return }
-  calendarBusy.value = true
-  try {
-    if (inCalendar.value) { await removeActivityFromCalendar(detail.value.id); inCalendar.value = false; ElMessage.success('已从我的日历移除') }
-    else { const { data } = await addActivityToCalendar(detail.value.id); inCalendar.value = true; ElMessage.success(data.already_added ? '该活动已在我的日历中' : '已加入我的日历') }
-  } finally { calendarBusy.value = false }
 }
 async function exportIcs() {
   if (!detail.value) return
@@ -114,11 +102,6 @@ async function subscribe(nodeId: number) {
 function goBack() {
   if (redirectTarget.value) {
     router.replace(redirectTarget.value)
-    return
-  }
-
-  if (sourceLabel.value) {
-    router.push('/')
     return
   }
 
@@ -144,10 +127,6 @@ watch(activityId, fetchDetail, { immediate: true })
   <div class="detail-page">
     <div class="detail-shell">
       <el-button text class="back-btn" @click="goBack">← 返回</el-button>
-
-      <div v-if="sourceLabel" class="source-hint">
-        来源：{{ sourceLabel }}
-      </div>
 
       <el-skeleton v-if="loading" animated :rows="8" />
 
@@ -175,13 +154,9 @@ watch(activityId, fetchDetail, { immediate: true })
           />
         </div>
 
-        <section v-if="context.nodes.length || context.source" class="context-card">
+        <section v-if="context.nodes.length" class="context-card">
           <div>
-            <h2>来源与关联</h2>
-            <p v-if="context.source || detail.source_url">活动信息来自
-              <a v-if="sourceUrl" :href="sourceUrl" target="_blank" rel="noopener noreferrer">{{ context.source?.name || detail.source_name || '官方来源' }}</a>
-              <span v-else>{{ context.source?.name || detail.source_name || '公开来源' }}</span>。
-            </p>
+            <h2>关联条件</h2>
           </div>
           <div v-if="context.nodes.length" class="node-list">
             <el-button v-for="node in context.nodes" :key="node.id" size="small" plain @click="subscribe(node.id)">{{ node.name }} · 订阅</el-button>
@@ -198,13 +173,12 @@ watch(activityId, fetchDetail, { immediate: true })
         <section class="action-card">
           <div class="action-text">
             <h3>参与这场活动</h3>
-            <p>报名、分享和收藏都将保留清晰反馈；报名需要登录。</p>
+            <p>报名成功后活动会自动加入日历；取消报名后会同步移除。</p>
           </div>
           <div class="action-buttons">
-            <el-button type="primary" :loading="registering" :disabled="registered" @click="register">{{ registered ? '已报名' : '立即报名' }}</el-button>
+            <el-button :type="registered ? 'danger' : 'primary'" :loading="registering" @click="toggleRegistration">{{ registered ? '取消报名' : '立即报名' }}</el-button>
             <el-button @click="share">分享</el-button>
             <el-button @click="toggleFavorite">{{ favorite ? '取消收藏' : '收藏' }}</el-button>
-            <el-button :loading="calendarBusy" @click="toggleCalendar">{{ inCalendar ? '移出日历' : '加入日历' }}</el-button>
             <el-button @click="exportIcs">导出 ICS</el-button>
           </div>
         </section>

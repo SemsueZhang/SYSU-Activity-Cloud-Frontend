@@ -51,13 +51,16 @@
   - 404：{ "message": "activity not found" }
 
 - POST /api/activities/:id/register
-  - 请求：身份需登录（Token），返回 `{ success: true, registrations: <number> }` 或错误码
+  - 请求：身份需登录（Token），成功后报名记录与日历事件同步建立，返回 `{ success: true, registrations: <number> }` 或错误码
+- DELETE /api/activities/:id/register
+  - 请求：身份需登录（Token），成功后报名记录与日历事件同步删除
 
 ## 交互流程要点
 - 页面加载：显示骨架屏 -> 请求成功后渲染 -> 失败显示 404 或错误提示
 - 报名流程：
-  1. 未登录：跳转 `/login?redirect=<current full url>`
-  2. 已登录：调用 `POST /api/activities/:id/register`，成功后刷新 `meta.registrations` 并显示成功提示
+  1. 未登录：跳转 `/auth/login?redirect=<current full url>`
+  2. 已登录且未报名：调用 `POST /api/activities/:id/register`，成功后刷新人数并提示已自动加入日历
+  3. 已登录且已报名：确认后调用 `DELETE /api/activities/:id/register`，成功后刷新人数并提示已从日历移除
 - 分享/收藏：UI 触发本地交互（若后端支持，调用相应 API）；尚未实现项显示“内容未实现！”占位
 - 返回行为：优先使用 `redirect` query（若存在），否则 `history.back()`，否则跳回首页
 
@@ -70,21 +73,22 @@
 ## Mock 要求与测试数据
 - Mock endpoints（已在 `frontend/mock/routes/activity.js` 增补）：
   - `GET /api/activities/:id`（示例返回包含 attachments/tags/meta）
-  - `POST /api/activities/:id/register`（模拟报名，增加 registrations）
+  - `POST /api/activities/:id/register`（报名并同步日历）
+  - `DELETE /api/activities/:id/register`（取消报名并同步移除日历）
   - `GET /api/search/internal` 与 `GET /api/search/external`（用于相关/搜索联调）
 - 本地示例凭据（见 `2026-05-24-plan.md`）：`admin/admin123456`，`zhangsan/123456`
 
 ## 验收标准（验收用例）
 1. 给定活动 ID，页面能展示 `title`、`event_time`、`location`、`organizer`、`activity_type`、`status`。
 2. 正文（`raw_text`）安全渲染，图片/附件可点击下载或查看。
-3. 报名按钮：未登录时跳转登录并保存 `redirect`，登录后调用报名接口并更新 `registrations`。
+3. 报名按钮：未登录时跳转登录并保存 `redirect`；登录后报名/取消会更新 `registrations`，并与个人日历保持一致。
 4. 对无效 ID 返回 404 页面，含友好提示与返回链接。
 5. 页面在窄屏与宽屏下布局合理，按钮可触控/键盘操作。
 
 ## 测试要点
 - 单元测试（Vitest）：
   - Mock `GET /api/activities/:id`，断言 `title` 与 `event_time` 渲染
-  - 模拟点击报名：未登录时断言跳转至 `/login?redirect=...`；已登录时断言调用 `POST /api/activities/:id/register`
+  - 模拟点击报名：未登录时断言跳转至 `/auth/login?redirect=...`；已登录时断言报名/取消接口及日历同步结果
 - 集成/手工：在 dev 模式下使用 mock server 验证搜索/相关活动联动
 
 ## 估时

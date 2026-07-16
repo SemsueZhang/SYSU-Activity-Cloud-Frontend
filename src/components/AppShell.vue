@@ -41,7 +41,8 @@ function logout() {
           <el-button v-if="auth.isLoggedIn" text @click="router.push('/calendar')">日历</el-button>
           <template v-if="auth.isLoggedIn">
             <el-button text @click="router.push('/profile')">{{ auth.user?.display_name || auth.user?.username }}</el-button>
-            <el-button v-if="auth.isPublisher" text @click="router.push('/my/activities')">我的发布</el-button>
+            <el-button text @click="router.push('/my/activities')">我的报名</el-button>
+            <el-button v-if="auth.isPublisher" text @click="router.push('/my/created/approved')">我的创建</el-button>
             <el-button v-if="auth.isAdmin" text @click="router.push('/admin')">管理</el-button>
             <el-button class="header-cta" type="primary" @click="logout">退出</el-button>
           </template>
@@ -63,11 +64,13 @@ function logout() {
 .app-shell { min-height: 100vh; background: var(--surface-muted); }
 .app-header { position: sticky; top: 0; z-index: 30; background: var(--brand); box-shadow: 0 2px 10px rgb(13 94 60 / 15%); }
 .app-header__inner { height: 60px; max-width: 1320px; margin: 0 auto; padding: 0 24px; display: flex; gap: 24px; align-items: center; }
-.brand { border: 0; background: transparent; color: #fff; cursor: pointer; font-size: 23px; font-weight: 800; letter-spacing: 1px; white-space: nowrap; }
+.brand { border: 0; background: transparent; color: #fff; cursor: pointer; font-family: "Arial Rounded MT Bold", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; font-size: 23px; font-weight: 700; letter-spacing: 1.5px; line-height: 1; white-space: nowrap; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.14); }
 .header-search { max-width: 480px; flex: 1; }
 .header-search :deep(.el-input__wrapper) { border-radius: 999px; }
 .header-nav { margin-left: auto; display: flex; gap: 2px; align-items: center; white-space: nowrap; }
-.header-nav :deep(.el-button--text) { color: rgb(255 255 255 / 90%); }
+.header-nav :deep(.el-button),.header-nav :deep(.el-button span) { color: #fff !important; font-weight: 600; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }
+.header-nav :deep(.el-button.is-text:hover),.header-nav :deep(.el-button.is-text:focus-visible) { color: #dff8e9 !important; }
+.header-nav :deep(.el-button.is-text:hover span),.header-nav :deep(.el-button.is-text:focus-visible span) { color: #dff8e9 !important; }
 .header-cta { border: 0; background: var(--brand-accent); }
 .app-main { max-width: 1280px; margin: 0 auto; padding: 32px 24px 48px; }
 .page-heading { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 24px; }

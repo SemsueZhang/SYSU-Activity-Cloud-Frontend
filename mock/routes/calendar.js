@@ -4,7 +4,7 @@
  */
 
 import { ACTIVITIES, CALENDAR_EVENTS } from '../db.js'
-import { getCurrentUser, parseBody } from '../utils.js'
+import { getCurrentUser } from '../utils.js'
 
 export default [
   {
@@ -18,29 +18,6 @@ export default [
         ...item, id: index + 1, date: item.date || `${month}-${String(index + 2).padStart(2, '0')}`,
       }))
       return { events }
-    },
-  },
-  {
-    method: 'POST', path: '/api/calendar/events', handler: async (req) => {
-      const user = getCurrentUser(req)
-      if (!user) return { __status: 401, message: '请先登录' }
-      const { poster_id } = await parseBody(req)
-      const activity = ACTIVITIES.find((item) => item.id === Number(poster_id) && item.status === 'published')
-      if (!activity) return { __status: 404, message: '活动不存在或尚未发布' }
-      const events = CALENDAR_EVENTS[user.id] ||= []
-      const existing = events.find((item) => item.activity_id === activity.id)
-      if (existing) return { event: existing, already_added: true }
-      const event = { activity_id: activity.id, date: activity.event_time?.slice(0, 10), time: activity.event_time?.slice(11, 16) || '09:00', title: activity.title, type: 'activity' }
-      events.push(event)
-      return { event, already_added: false }
-    },
-  },
-  {
-    method: 'DELETE', path: '/api/calendar/events/:posterId', handler: async (req) => {
-      const user = getCurrentUser(req)
-      if (!user) return { __status: 401, message: '请先登录' }
-      CALENDAR_EVENTS[user.id] = (CALENDAR_EVENTS[user.id] || []).filter((item) => item.activity_id !== Number(req.params.posterId))
-      return { success: true }
     },
   },
   {

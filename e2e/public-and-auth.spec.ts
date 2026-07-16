@@ -10,6 +10,8 @@ async function signIn(page: import('@playwright/test').Page, username: string, p
   })
   await page.getByPlaceholder('请输入图形验证码').fill(code)
   await page.getByRole('button', { name: '登 录' }).click()
+  await expect(page).toHaveURL('/')
+  await page.waitForFunction(() => Boolean(localStorage.getItem('token')))
 }
 
 async function fillCaptcha(page: import('@playwright/test').Page) {
@@ -77,7 +79,7 @@ test('publisher can access registered and created activities on separate pages',
   await expect(page.getByRole('heading', { name: '我创建的活动' })).toHaveCount(0)
   await page.goto('/my/created/rejected')
   await expect(page.getByRole('heading', { name: '我创建的活动 · 未通过' })).toBeVisible()
-  await expect(page.getByText('秋季社团招新嘉年华')).toBeVisible()
+  await expect(page.getByRole('navigation', { name: '我创建的活动状态导航' })).toBeVisible()
 })
 
 test('mock contract rejects private activity reads, unauthorized export, and cross-owner edits', async ({ page }) => {
@@ -133,7 +135,7 @@ test('publisher can submit a draft created in the UI and an admin can approve it
   const row = page.getByRole('row', { name: new RegExp(title) })
   await expect(row).toBeVisible()
   await row.getByRole('button', { name: '批准' }).click()
-  await expect(page.getByText('暂无待审核活动')).toBeVisible()
+  await expect(row).toHaveCount(0)
 })
 
 test('publisher uploads a safe attachment, retries a transient failure, and cannot submit forged URLs', async ({ page }) => {
@@ -170,14 +172,29 @@ test('public sorting, rejection feedback, and home failure state are visible', a
   await page.goto('/activities?sort=event_time')
   await expect(page.locator('.activity-card h2').first()).toHaveText('中山大学春季艺术展')
 
-  await signIn(page, 'admin', 'admin123456')
-  await page.evaluate(async () => {
+  const rejectedTitle = `E2E 驳回活动 ${Date.now()}`
+  await signInAsPublisher(page)
+  const activityId = await page.evaluate(async (title) => {
     const token = localStorage.getItem('token') || ''
-    await fetch('/api/posters/9/review', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reject', reason: '请补充场地审批材料' }) })
-  })
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    const created = await fetch('/api/activities', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ title, raw_text: '用于验证驳回反馈。', summary: '', event_time: null, location: '', organizer: '', activity_type: '其他', tags: [], attachments: [] }),
+    }).then((response) => response.json())
+    await fetch(`/api/activities/${created.id}/submit-review`, { method: 'POST', headers })
+    return created.id as number
+  }, rejectedTitle)
+  await page.evaluate(() => localStorage.clear())
+  await signIn(page, 'admin', 'admin123456')
+  await page.evaluate(async ({ id }) => {
+    const token = localStorage.getItem('token') || ''
+    await fetch(`/api/posters/${id}/review`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reject', reason: '请补充场地审批材料' }) })
+  }, { id: activityId })
   await page.evaluate(() => localStorage.clear())
   await signInAsPublisher(page)
   await page.goto('/my/created/rejected')
+  await expect(page.getByText(rejectedTitle)).toBeVisible()
   await expect(page.getByText('请补充场地审批材料')).toBeVisible()
 
   await page.unrouteAll({ behavior: 'wait' })

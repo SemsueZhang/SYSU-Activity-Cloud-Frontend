@@ -2,7 +2,7 @@
  * Activity Mock routes. These mirror the frontend contract, including ownership
  * and publication boundaries, without replacing the real backend's authorization.
  */
-import { ACTIVITIES, CALENDAR_EVENTS, UPLOADS, USER_STATE, getNextActivityId } from '../db.js'
+import { ACTIVITIES, CALENDAR_EVENTS, DEMO_USER, REGISTERED_USERS, REGULAR_USER, UPLOADS, USER_STATE, getNextActivityId } from '../db.js'
 import { getCurrentUser, parseBody } from '../utils.js'
 
 const PORT = 5000
@@ -25,6 +25,39 @@ function sortActivities(items, sort) {
 
 function canManageActivity(user, activity) {
   return user?.role === 'admin' || activity.created_by === user?.id
+}
+
+function registeredAttendees(activityId) {
+  const users = [DEMO_USER, REGULAR_USER, ...Object.values(REGISTERED_USERS).map((user) => user.info)]
+  const registeredAt = USER_STATE.registrationTimes[activityId] || {}
+  return (USER_STATE.registrations[activityId] || []).map((record) => {
+    const userId = typeof record === 'number' ? record : record.user_id
+    const user = users.find((item) => item.id === userId)
+    if (!user) return null
+    return {
+      id: user.id,
+      username: user.username,
+      name: typeof record === 'number' ? (user.display_name || user.username) : record.name,
+      student_id: typeof record === 'number' ? '' : record.student_id,
+      college: typeof record === 'number' ? '' : record.college,
+      email: typeof record === 'number' ? user.email : (record.email || user.email),
+      registered_at: typeof record === 'number' ? (registeredAt[user.id] || null) : record.registered_at,
+    }
+  }).filter(Boolean)
+}
+
+function isRegisteredBy(records, userId) {
+  return records.some((record) => (typeof record === 'number' ? record : record.user_id) === userId)
+}
+
+function csvCell(value) {
+  return `"${String(value ?? '').replaceAll('"', '""')}"`
+}
+
+function registrationsCsv(activityId) {
+  const header = ['user_id', 'name', 'student_id', 'college', 'email', 'registered_at']
+  const rows = registeredAttendees(activityId).map((item) => [item.id, item.name, item.student_id, item.college, item.email, item.registered_at])
+  return `\ufeff${[header, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`
 }
 
 function visibleDetail(activity, user) {
@@ -78,8 +111,18 @@ export default [
       const user = getCurrentUser(req)
       if (!user) return { __status: 401, message: '请先登录' }
       const url = new URL(req.url, `http://localhost:${PORT}`)
-      const items = ACTIVITIES.filter((item) => (USER_STATE.registrations[item.id] || []).includes(user.id))
+      const items = ACTIVITIES.filter((item) => isRegisteredBy(USER_STATE.registrations[item.id] || [], user.id))
       return page(items, url)
+    },
+  },
+  {
+    method: 'GET', path: '/api/activities/recommendations', handler: async (req) => {
+      const user = getCurrentUser(req)
+      if (!user) return { __status: 401, message: '请先登录' }
+      const seen = new Set([...(USER_STATE.favorites[user.id] || []), ...(USER_STATE.registrations && Object.entries(USER_STATE.registrations).filter(([, records]) => isRegisteredBy(records, user.id)).map(([id]) => Number(id)) || [])])
+      const favouriteTypes = new Set(ACTIVITIES.filter((item) => (USER_STATE.favorites[user.id] || []).includes(item.id)).map((item) => item.activity_type))
+      const items = ACTIVITIES.filter((item) => item.status === 'published' && !seen.has(item.id)).map((item) => ({ ...item, score: favouriteTypes.has(item.activity_type) ? 6 : 1, reason: favouriteTypes.has(item.activity_type) ? '与你收藏的活动兴趣相近' : '近期校园热门活动' })).sort((a, b) => b.score - a.score).slice(0, 6)
+      return { items }
     },
   },
   {
@@ -144,6 +187,31 @@ export default [
     },
   },
   {
+    method: 'GET', path: '/api/activities/:id/registrations', handler: async (req) => {
+      const user = getCurrentUser(req)
+      const activity = ACTIVITIES.find((item) => item.id === Number(req.params.id))
+      if (!user) return { __status: 401, message: '请先登录' }
+      if (!activity) return { __status: 404, message: 'activity not found' }
+      if (!canManageActivity(user, activity)) return { __status: 403, message: '只有活动创建者或管理员可以查看报名名单' }
+      const url = new URL(req.url, `http://localhost:${PORT}`)
+      return page(registeredAttendees(activity.id), url)
+    },
+  },
+  {
+    method: 'GET', path: '/api/activities/:id/registrations.csv', handler: async (req) => {
+      const user = getCurrentUser(req)
+      const activity = ACTIVITIES.find((item) => item.id === Number(req.params.id))
+      if (!user) return { __status: 401, message: '请先登录' }
+      if (!activity) return { __status: 404, message: 'activity not found' }
+      if (!canManageActivity(user, activity)) return { __status: 403, message: '只有活动创建者或管理员可以导出报名表' }
+      return {
+        __raw: registrationsCsv(activity.id),
+        __contentType: 'text/csv; charset=utf-8',
+        __headers: { 'Content-Disposition': `attachment; filename="activity-${activity.id}-registrations.csv"` },
+      }
+    },
+  },
+  {
     method: 'GET', path: '/api/activities/:id', handler: async (req) => {
       const activity = ACTIVITIES.find((item) => item.id === Number(req.params.id))
       const user = getCurrentUser(req)
@@ -152,9 +220,9 @@ export default [
         ...activity,
         tags: activity.tags || ['学术', '公开'],
         attachments: activity.attachments || [{ url: '/media/activity-cover.png', name: '活动海报' }],
-        meta: activity.meta || { views: 128, registrations: 36 },
+        meta: { ...(activity.meta || { views: 128, registrations: 0 }), registrations: (USER_STATE.registrations[activity.id] || []).length },
         favorite: Boolean(user && (USER_STATE.favorites[user.id] || []).includes(activity.id)),
-        registered: Boolean(user && (USER_STATE.registrations[activity.id] || []).includes(user.id)),
+        registered: Boolean(user && isRegisteredBy(USER_STATE.registrations[activity.id] || [], user.id)),
         source_name: activity.source_name || activity.organizer || '校园公开信息源',
         source_url: activity.source_url || 'https://www.sysu.edu.cn',
       }
@@ -169,13 +237,24 @@ export default [
       if (!user) return { __status: 401, message: '请先登录' }
       if (!activity || activity.status !== 'published') return { __status: 404, message: 'activity not found' }
       const registeredUsers = USER_STATE.registrations[activity.id] ||= []
+      const body = await parseBody(req)
+      const name = String(body.name || '').trim()
+      const studentId = String(body.student_id || '').trim()
+      const college = String(body.college || '').trim()
+      const email = String(body.email || '').trim()
+      if (!name || !studentId || !college || !email) return { __status: 422, message: '请完整填写姓名、学号、学院和联系邮箱' }
+      if (!/^\S+@\S+\.\S+$/.test(email)) return { __status: 422, message: '请输入有效的联系邮箱' }
+      if (name.length > 50 || studentId.length > 30 || college.length > 80 || email.length > 120) return { __status: 422, message: '报名信息长度不符合要求' }
       activity.meta = activity.meta || { views: 0, registrations: 0 }
-      if (registeredUsers.includes(user.id)) {
+      if (isRegisteredBy(registeredUsers, user.id)) {
         addRegisteredActivityToCalendar(user, activity)
         return { success: true, already_registered: true, registrations: activity.meta.registrations || 0 }
       }
-      registeredUsers.push(user.id)
-      activity.meta.registrations = (activity.meta.registrations || 0) + 1
+      const registeredAt = new Date().toISOString()
+      registeredUsers.push({ user_id: user.id, name, student_id: studentId, college, email, registered_at: registeredAt })
+      const registrationTimes = USER_STATE.registrationTimes[activity.id] ||= {}
+      registrationTimes[user.id] = registeredAt
+      activity.meta.registrations = registeredUsers.length
       addRegisteredActivityToCalendar(user, activity)
       return { success: true, already_registered: false, registrations: activity.meta.registrations }
     },
@@ -187,10 +266,11 @@ export default [
       if (!user) return { __status: 401, message: '请先登录' }
       if (!activity) return { __status: 404, message: 'activity not found' }
       const registeredUsers = USER_STATE.registrations[activity.id] ||= []
-      const wasRegistered = registeredUsers.includes(user.id)
-      USER_STATE.registrations[activity.id] = registeredUsers.filter((userId) => userId !== user.id)
+      const wasRegistered = isRegisteredBy(registeredUsers, user.id)
+      USER_STATE.registrations[activity.id] = registeredUsers.filter((record) => (typeof record === 'number' ? record : record.user_id) !== user.id)
+      delete USER_STATE.registrationTimes[activity.id]?.[user.id]
       activity.meta = activity.meta || { views: 0, registrations: 0 }
-      if (wasRegistered) activity.meta.registrations = Math.max((activity.meta.registrations || 0) - 1, 0)
+      if (wasRegistered) activity.meta.registrations = USER_STATE.registrations[activity.id].length
       removeRegisteredActivityFromCalendar(user, activity.id)
       return { success: true, registrations: activity.meta.registrations || 0 }
     },

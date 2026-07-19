@@ -1,0 +1,9 @@
+\contentsline {section}{\numberline {1}工程化目标}{1}{section.1}%
+\contentsline {section}{\numberline {2}已采用的工程实践}{2}{section.2}%
+\contentsline {section}{\numberline {3}协作流程}{3}{section.3}%
+\contentsline {section}{\numberline {4}自动化流水线}{3}{section.4}%
+\contentsline {section}{\numberline {5}质量门禁与完成定义}{4}{section.5}%
+\contentsline {section}{\numberline {6}当前缺口与改进计划}{4}{section.6}%
+\contentsline {section}{\numberline {7}工程资产核对表}{5}{section.7}%
+\contentsline {section}{\numberline {8}协作产物的最低要求}{5}{section.8}%
+\contentsline {section}{\numberline {9}过程度量与改进闭环}{5}{section.9}%

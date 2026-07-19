@@ -48,10 +48,11 @@ test('home search, email registration, and enrollment idempotency are usable', a
   await page.getByRole('button', { name: '注 册' }).click()
   await expect(page).toHaveURL('/auth/login')
   await signIn(page, username, 'test123456')
-  const result = await page.evaluate(async () => {
+  const result = await page.evaluate(async (email) => {
     const token = localStorage.getItem('token')
-    const headers = { Authorization: `Bearer ${token}` }
-    const request = () => fetch('/api/activities/1/register', { method: 'POST', headers }).then((response) => response.json())
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    const form = { name: '端到端测试用户', student_id: '20260001', college: '计算机学院', email }
+    const request = () => fetch('/api/activities/1/register', { method: 'POST', headers, body: JSON.stringify(form) }).then((response) => response.json())
     const first = await request()
     const second = await request()
     const registeredAfter = await fetch('/api/activities/registered?per_page=100', { headers }).then((response) => response.json())
@@ -60,7 +61,7 @@ test('home search, email registration, and enrollment idempotency are usable', a
     const registeredRemoved = await fetch('/api/activities/registered?per_page=100', { headers }).then((response) => response.json())
     const calendarRemoved = await fetch('/api/calendar/events?month=2026-06', { headers }).then((response) => response.json())
     return { first, second, registeredAfter, calendarAfter, cancelled, registeredRemoved, calendarRemoved }
-  })
+  }, `${username}@example.com`)
   expect(result.first.already_registered).toBe(false)
   expect(result.second.already_registered).toBe(true)
   expect(result.second.registrations).toBe(result.first.registrations)

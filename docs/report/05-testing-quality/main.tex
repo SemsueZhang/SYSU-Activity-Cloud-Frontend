@@ -1,0 +1,220 @@
+\documentclass[12pt,a4paper]{ctexart}
+\input{../report-common.tex}
+\begin{document}
+\reportcover{软件测试与质量保证报告}
+\pagenumbering{Roman}\tableofcontents\clearpage\pagenumbering{arabic}
+\docmeta
+
+\section{测试目标}
+测试的目标是验证逸仙活动云系统在正常、边界和异常条件下满足需求分析中定义的功能和非功能需求，并通过自动化回归降低迭代过程中的缺陷逃逸风险。具体包括：
+\begin{enumerate}
+\item 验证核心业务功能（认证、活动发现、发布审核、个人参与）的正确性和可用性。
+\item 验证系统在异常输入、网络故障和越权访问下的防护能力和错误处理正确性。
+\item 验证前后端接口契约的一致性，即前端期望的数据结构、状态码和错误语义与后端实现保持一致。
+\item 通过自动化测试建立回归防护网，确保功能迭代不破坏已有正确行为。
+\end{enumerate}
+
+\section{测试范围}
+\subsection{功能范围}
+本次测试覆盖需求分析中定义的八项功能域：
+\begin{enumerate}
+\item \textbf{活动发现与检索（FR-01）：} 活动列表展示、关键词搜索、分类/状态筛选、分页、活动详情展示。
+\item \textbf{身份认证与授权（FR-02）：} 图形验证码登录、邮箱验证码注册、JWT 会话管理、角色鉴权。
+\item \textbf{活动发布与审核（FR-03）：} 草稿创建与编辑、提交审核、审核通过/驳回、状态流转。
+\item \textbf{个人参与管理（FR-04）：} 报名、取消报名、收藏、取消收藏、个人日历、ICS 导出。
+\item \textbf{发布者申请管理（FR-05）：} 提交申请、管理员审批、角色变更。
+\item \textbf{知识关联与订阅通知（FR-06）：} 知识节点关联、订阅管理、通知生成与已读标记。
+\item \textbf{数据源与内容质量（FR-07）：} 数据源维护、抓取日志、质量分、疑似重复标识、URL 安全校验。
+\item \textbf{审计与安全治理（FR-08）：} 审计日志记录与查询、密码哈希存储、敏感日志脱敏。
+\end{enumerate}
+
+\subsection{非功能范围}
+\begin{enumerate}
+\item \textbf{性能：} 读接口 P95 响应时间不超过 500ms，写接口不超过 1s（本地/CI 环境基准）。
+\item \textbf{易用性：} 页面在 360px 以上视口无横向溢出，表单校验在输入位置即时提示。
+\item \textbf{安全性：} 越权请求返回 403，XSS 注入被转义，外部 URL 抓取过滤内网地址。
+\end{enumerate}
+
+\subsection{排除范围}
+以下内容不纳入本次系统测试范围：第三方邮件服务的送达率和延迟、外部搜索引擎的索引质量和排序算法、AI 服务的生成内容准确性，以及数据库在高并发下的性能压力测试。这些依赖以 Mock/降级合同验证为主，不以真实第三方服务的稳定性评价本系统的正确性。
+
+\section{测试策略}
+\begin{center}
+\begin{tikzpicture}[font=\small,
+  layer/.style={draw,rounded corners,minimum width=9cm,minimum height=.7cm,align=center},
+  arr/.style={-Latex,thick}
+]
+\node[layer,fill=green!10] (unit) at (0,0) {单元测试：纯函数、服务规则、组件、状态管理};
+\node[layer,fill=blue!10] (integ) at (0,1.0) {集成/API 测试：Flask 测试客户端、内存 SQLite、JWT 与数据约束};
+\node[layer,fill=orange!12] (e2e) at (0,2.0) {系统测试（E2E）：Playwright + Mock/Vite，验证关键用户旅程};
+\node[layer,fill=red!8] (accept) at (0,3.0) {验收测试：响应式、可访问性、跨端联调、部署冒烟};
+\draw[arr] (unit)--(integ);
+\draw[arr] (integ)--(e2e);
+\draw[arr] (e2e)--(accept);
+\end{tikzpicture}
+\vspace{0.2em}
+{\small\itshape 图1：测试金字塔——从单元到验收逐层覆盖}
+\end{center}
+
+\subsection{单元测试}
+前端使用 Vitest + \texttt{@vue/test-utils} 对以下模块执行单元测试：认证 Store 的登录/登出状态管理、活动排序工具函数、活动质量评分函数、日历卡片组件渲染、活动详情组件状态分支。后端使用 pytest 对服务层纯函数执行单元测试，包括内容质量评分、去重判定、安全 URL 校验、知识节点匹配和搜索日志格式化。单元测试不依赖数据库、网络和外部服务。
+
+\subsection{集成测试}
+后端集成测试使用 Flask 测试客户端和内存 SQLite 数据库，\texttt{conftest.py} 提供隔离的测试应用实例、测试 JWT、以及典型用户、活动和数据源夹具。覆盖的 API 模块包括：auth（登录、注册、用户信息）、posters（活动 CRUD、状态转换）、audit logs（审计记录写入和查询）、data sources（创建、校验、列表）、knowledge（节点管理、关联）、search（内部搜索、外部搜索降级）、quality（质量评分）、dedup（疑似重复检测）、security（URL 校验、HTML 转义）。
+
+\subsection{系统测试}
+系统测试（端到端测试）使用 Playwright 驱动 Chromium 浏览器，在 Mock 服务模式下验证完整用户旅程：访客浏览活动列表和详情页、用户注册和登录流程、发布者创建活动和提交审核、管理员审核活动和审批申请。系统测试覆盖页面跳转、权限导航、加载态和错误态等用户可见行为。
+
+\subsection{验收测试}
+验收测试以手工方式执行，覆盖三类场景：
+\begin{enumerate}
+\item \textbf{响应式布局：} 在 375px、768px、1024px 和桌面宽度下检查页面布局，确认无水平溢出、按钮遮挡或关键信息丢失。
+\item \textbf{可访问性：} 通过 Tab 键遍历页面主要交互元素，确认焦点可见、操作可触达。
+\item \textbf{部署冒烟：} 使用 Docker Compose 启动完整服务后，访问健康检查接口、执行登录和活动查询等最小业务流程。
+\end{enumerate}
+第三方邮件、外部搜索和 AI 服务以 Mock 验证为主，不以真实第三方稳定性评价系统正确性。
+
+\section{测试环境}
+\begin{tabularx}{\textwidth}{p{2.6cm}Y}
+\toprule 项目 & 规定 \\\midrule
+前端环境 & Node 22（CI）/ Node 18+（本地）；\texttt{npm ci} 安装依赖；Vite 开发服务器；Mock 服务（\texttt{node mock/index.js}）；Chromium 浏览器（Playwright）。 \\
+后端环境 & Python 3.10+ 虚拟环境；依赖从 \texttt{requirements-dev.txt} 安装；测试使用 \texttt{sqlite:///:memory:} 内存数据库；禁用真实 Redis、邮件服务和 LLM 调用。 \\
+CI 环境 & GitHub Actions Ubuntu 最新版；\texttt{actions/setup-node@v4} 配置 Node 22；\texttt{npx playwright install --with-deps chromium} 安装浏览器。 \\
+准入条件 & 相关需求编号和接口契约已确认；测试数据和测试账号可用；项目构建成功；外部依赖可 Mock 或可降级。 \\
+退出条件 & P0/P1 缺陷为零；受影响自动化测试全部通过；关键手工验收用例通过；遗留风险已记录并指定负责人。 \\
+\bottomrule
+\end{tabularx}
+
+\section{测试计划}
+测试活动在项目开发周期内按迭代分阶段执行：
+\begin{enumerate}
+\item \textbf{第一阶段（第 1--3 周）：} 搭建测试基础设施，配置 Vitest、Playwright 和 pytest；编写认证模块（FR-02）的 API 集成测试和前端组件单元测试。
+\item \textbf{第二阶段（第 4--7 周）：} 覆盖活动发布与审核（FR-03）和个人参与（FR-04）的测试用例；添加端到端测试覆盖访客浏览和登录注册流程。
+\item \textbf{第三阶段（第 8--10 周）：} 补充审计（FR-08）、知识通知（FR-06）和数据治理（FR-07）的测试覆盖；执行兼容性和响应式验收测试。
+\item \textbf{第四阶段（第 11--12 周）：} 全量回归测试；缺陷修复验证；测试报告和覆盖率数据归档。
+\end{enumerate}
+
+\section{测试用例设计}
+\subsection{功能测试用例}
+\begin{longtable}{p{1.0cm}p{2.4cm}p{3.2cm}p{3.6cm}}
+\toprule 编号 & 需求/场景 & 步骤与输入 & 预期结果 \\\midrule\endhead
+TC-01 & 认证成功/失败（FR-02） & 使用正确凭据登录；使用错误密码登录；缺少必填字段登录。 & 成功返回 token 和用户信息；错误密码返回 401；缺字段返回 400。 \\
+TC-02 & 未认证与越权控制（FR-02） & 无 token 访问 \texttt{/auth/me}；viewer 角色用户调用数据源管理接口。 & 无 token 返回 401；越权返回 403；不产生写入副作用。 \\
+TC-03 & 发布审核状态流转（FR-03） & publisher 创建 draft 草稿→提交审核；admin 批准/驳回；重复提交。 & 状态按 draft→pending\_review→published/rejected 迁移；非法迁移返回 400；审核意见和审计日志存在。 \\
+TC-04 & 报名/日历幂等（FR-04） & 同一用户对同一活动重复报名；重复加入日历；取消报名。 & 仅存在一条关联记录；取消后报名和日历事件同步移除。 \\
+TC-05 & 数据源校验（FR-07） & 缺名称/URL 创建数据源；viewer 创建数据源；ftp 协议 URL。 & 参数错误 400；越权 403；拒绝非 http/https 协议和内网地址。 \\
+TC-06 & 内容安全（FR-07） & 以 \texttt{<script>} 标签作为活动标题提交；抓取结果含控制字符。 & 输出已 HTML 转义；不执行脚本；控制字符被过滤。 \\
+TC-07 & 检索与降级（FR-01） & 内部搜索空关键词、存在结果；外部搜索服务不可达。 & 内部返回稳定字段和排序；外部搜索降级返回 query/results/count/source/error 结构。 \\
+TC-08 & 前端用户旅程 & 访客浏览活动列表→进入详情；登录后创建活动→提交审核；管理员审核。 & URL、视图、权限导航和错误态符合设计；E2E 可重复执行。 \\
+TC-09 & 发布者申请（FR-05） & 普通用户提交发布者申请；管理员审批通过/驳回。 & 申请记录创建成功；审批后用户角色变更。 \\
+TC-10 & 知识订阅通知（FR-06） & 用户订阅知识节点；管理员发布关联该节点的活动。 & 匹配活动发布后生成站内通知；用户可查看并标记已读。 \\
+\bottomrule
+\end{longtable}
+
+\subsection{性能测试用例}
+\begin{longtable}{p{1.0cm}p{2.4cm}p{3.2cm}p{3.6cm}}
+\toprule 编号 & 场景 & 测试方法 & 预期指标 \\\midrule\endhead
+TC-P01 & 活动列表响应时间 & 使用 API 测试工具连续请求活动列表 50 次，统计 P95 延迟。 & P95 < 500ms（本地/CI 环境）。 \\
+TC-P02 & 登录接口响应时间 & 连续执行登录请求 30 次（含验证码校验），统计 P95 延迟。 & P95 < 1s（含验证码发送）。 \\
+TC-P03 & 前端首页加载 & 使用 Playwright 测量首页首屏加载时间。 & 模拟校园网环境下 < 2s。 \\
+TC-P04 & 并发请求稳定性 & 对活动列表接口发起 50 并发请求。 & 错误率 < 1\%。 \\
+\bottomrule
+\end{longtable}
+
+\subsection{兼容性测试用例}
+\begin{longtable}{p{1.0cm}p{2.4cm}p{3.2cm}p{3.6cm}}
+\toprule 编号 & 场景 & 测试方法 & 预期结果 \\\midrule\endhead
+TC-C01 & 视口宽度兼容 & 在 375px、768px、1024px、1920px 宽度下检查主要页面。 & 无水平溢出、无按钮遮挡、关键信息完整可见。 \\
+TC-C02 & 浏览器兼容 & 在 Chromium（Playwright）中执行端到端测试。 & 全部 E2E 测试通过。 \\
+TC-C03 & 键盘导航 & 使用 Tab 键遍历活动详情页、登录表单和管理页面。 & 焦点顺序合理，主要交互元素可键盘触达。 \\
+\bottomrule
+\end{longtable}
+
+\subsection{异常与边界测试用例}
+\begin{longtable}{p{1.0cm}p{2.4cm}p{3.2cm}p{3.6cm}}
+\toprule 编号 & 场景 & 测试方法 & 预期结果 \\\midrule\endhead
+TC-E01 & 网络异常 & 前端在网络断开状态下操作。 & 页面显示网络错误提示，不产生后台请求。 \\
+TC-E02 & 空数据状态 & 无已发布活动时访问活动列表；无通知时访问通知页面。 & 显示空态提示和引导（如"暂无活动"）。 \\
+TC-E03 & 非法输入 & 超长标题（>200 字符）；负数的活动 ID；非法日期格式。 & 服务端返回 400 和明确错误信息；前端显示校验提示。 \\
+TC-E04 & SSRF 防护 & 提交 \texttt{file://} 协议、\texttt{10.0.0.1} 内网地址、\texttt{localhost} 的抓取目标 URL。 & 请求被拒绝，返回安全校验错误。 \\
+TC-E05 & 并发重复提交 & 对同一活动快速连续发送两次报名请求。 & 数据库唯一约束保证仅一条报名记录。 \\
+\bottomrule
+\end{longtable}
+
+\section{测试执行结果}
+本次复核执行记录如下（2026-07-18）：
+\begin{tabularx}{\textwidth}{p{2.8cm}p{4.0cm}Y}
+\toprule 检查项 & 实际命令/观察 & 结论与后续动作 \\\midrule
+前端聚合验证 & \texttt{npm run verify} 输出 verify→\texttt{vue-tsc -b \&\& vite build}，在本次受限执行窗口内未出现 unit/E2E 阶段结果。 & 未完成，不能判定通过。需在开发机或 CI 环境采集完整退出码和日志。 \\
+前端单独构建 & \texttt{npm run build} 同样只输出到 \texttt{vue-tsc -b \&\& vite build}，未取得完成标识。 & 构建阻塞待确认。需定位 TypeScript 检查或构建过程中的阻塞点。 \\
+后端 pytest & \texttt{pytest -q -p no:cacheprovider} 返回 \texttt{No module named pytest}。 & 环境缺陷。需安装开发依赖后重跑并保存测试报告。 \\
+LaTeX 文档编译 & 六份报告均使用 XeLaTeX 编译，模型/架构/工程图页经抽样检查。 & 文档制品可正常生成。 \\
+\bottomrule
+\end{tabularx}
+
+\section{缺陷管理}
+\subsection{缺陷分类}
+缺陷按严重度分为四个级别：
+\begin{enumerate}
+\item \textbf{P0（致命）：} 安全泄露、数据破坏或全站不可用。立即停止发布并建立临时缓解措施。
+\item \textbf{P1（严重）：} 核心业务流程受阻，无可用替代方案。必须在当前迭代修复。
+\item \textbf{P2（一般）：} 非核心功能缺陷，存在可接受的替代方案。可安排至下一迭代修复。
+\item \textbf{P3（建议）：} 界面样式、文案错误或文档问题。视资源情况安排修复。
+\end{enumerate}
+
+\subsection{缺陷生命周期}
+缺陷的状态流转为：新建 $\rightarrow$ 已确认 $\rightarrow$ 处理中 $\rightarrow$ 待验证 $\rightarrow$ 已关闭 / 重开。每个缺陷单包含以下字段：编号、发现版本/环境、关联需求编号或用例、复现步骤、实际结果与期望结果、日志或截图附件、严重度、优先级、负责人、当前状态和修复验证人。所有已关闭缺陷必须关联回归测试用例，或明确说明不适合自动化验证的原因。
+
+\subsection{缺陷跟踪记录}
+当前记录的缺陷与阻塞项：
+\begin{tabularx}{\textwidth}{p{1.2cm}p{1.0cm}p{3.2cm}Y}
+\toprule 编号 & 级别 & 现象 & 处置与关闭准则 \\\midrule
+QA-001 & P1 & 当前环境未取得前端 \texttt{npm run verify} 的完成退出码及单元/E2E 测试结果。 & 在干净终端或 CI 环境运行并保留完整日志；修复后全量验证通过方可关闭。 \\
+QA-002 & P1 & 后端虚拟环境缺少 pytest，现有 20+ 测试文件无法执行。 & 安装开发依赖，执行 pytest；生成 JUnit 和覆盖率报告，将失败项逐一关联缺陷。 \\
+QA-003 & P2 & 尚未建立性能基线、浏览器无障碍扫描、契约自动化测试和安全扫描制品。 & 在预发布环境执行并设定阈值；作为发布前质量门禁或记录为经批准的风险接受项。 \\
+\bottomrule
+\end{tabularx}
+
+\section{质量保证方法}
+\subsection{代码审查}
+每个合并请求至少由一名非作者成员审查，检查要点包括：
+\begin{enumerate}
+\item 权限边界是否在服务端强制执行，前端是否遵循角色控制隐藏或禁用入口。
+\item 异常路径（空数据、网络失败、参数非法、越权）是否被覆盖。
+\item 代码可读性：命名是否清晰，函数是否过长，注释是否有价值。
+\item 测试覆盖：新增或修改的功能是否有对应的单元测试或端到端测试。
+\end{enumerate}
+审查未通过、CI 失败或包含真实密钥的合并请求不得合并。紧急修复可走快速通道，但修复后必须补齐测试和复盘记录。
+
+\subsection{静态检查}
+前端在构建时通过 \texttt{vue-tsc -b} 执行 TypeScript 严格模式类型检查，捕获接口字段不匹配、空值引用和类型错误。后端计划集成 pylint 或 flake8 在 CI 中执行静态检查，当前阶段以人工审查补充。
+
+\subsection{自动化测试}
+三项自动化测试手段已在项目中落地：
+\begin{enumerate}
+\item 本地 \texttt{npm run verify} 串行执行构建、Vitest 单元测试和 Playwright 端到端测试。
+\item GitHub Actions 在 push 和 pull request 上自动执行前端验证工作流。
+\item 后端 pytest 测试覆盖认证、活动、审计、数据源、知识、搜索、质量、去重和安全模块，使用内存 SQLite 和测试夹具保证隔离性。
+\end{enumerate}
+
+\subsection{回归测试}
+自动化回归测试在每一次 CI 触发时自动执行。影响核心业务流的代码变更必须确保新增或修改的测试用例随变更提交。端到端测试覆盖访客浏览、登录注册和活动搜索等关键用户旅程，确保功能迭代不破坏已有正确行为。
+
+\subsection{发布检查}
+发布前的质量门禁包括：
+\begin{enumerate}
+\item CI 工作流必须全部通过（构建、单元测试、端到端测试）。
+\item 目标版本的 P0/P1 缺陷必须为零。
+\item 合约矩阵在接口变更后已同步更新。
+\item 后端 Docker Compose 健康检查通过，关键冒烟测试用例手工验证通过。
+\item 版本 tag 已创建，release notes 已编写。
+\end{enumerate}
+
+\section{测试结论}
+通过上述测试策略和质量保证方法，逸仙活动云项目建立了覆盖单元、集成、系统和验收四个层次的测试体系。前端自动化测试（Vitest + Playwright）已集成到 CI 流水线，后端 pytest 测试资产覆盖全部核心模块。当前阶段的主要限制是后端 CI 尚未启用、前端构建存在阻塞待确认、以及性能基线和无障碍扫描等属于后续补充项。
+
+测试与需求的可追溯性方面：FR-02 对应认证 API 测试、auth store 测试和 \texttt{test\_auth\_api.py}；FR-03 对应活动编辑/审核页、posters API 测试和审计测试；FR-05/FR-07 对应知识、去重、质量、搜索和安全服务测试；FR-08 对应 Axios 拦截器、页面状态和 Playwright 授权流程。每新增需求应至少补充一个正向和一个异常/权限测试用例；修复缺陷应关联回归测试用例。
+
+在完成 QA-001 和 QA-002 的环境修复、以及后端 CI 和契约自动化测试的补充后，本系统的测试体系可达到可提交、可回归、可发布的质量门禁标准。
+
+\end{document}

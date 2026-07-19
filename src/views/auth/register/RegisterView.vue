@@ -11,6 +11,7 @@ import CaptchaField from '@/components/CaptchaField.vue'
 const router = useRouter();
 
 const formRef = ref<FormInstance>();
+const captchaRef = ref<{ refresh: () => Promise<void> } | null>(null)
 const loading = ref(false);
 const showPwd = ref(false);
 const showConfirmPwd = ref(false);
@@ -65,11 +66,11 @@ async function handleSendCode() {
   sendingCode.value = true;
   try {
     const res = await sendVerificationCode(form.email);
-    // Mock 模式下验证码直接返回到前端
+    // Local development returns the code when SMTP is intentionally unconfigured.
     const code = res.data.code;
     if (code) {
       form.verificationCode = code;
-      ElMessage.success(`验证码已发送（Mock: ${code}）`);
+      ElMessage.success(`验证码已生成并自动填入（本地开发：${code}）`);
     } else {
       ElMessage.success("验证码已发送，请检查邮箱");
     }
@@ -113,6 +114,8 @@ async function handleRegister() {
     ElMessage.success("注册成功，请登录");
     router.push("/auth/login");
   } catch (err: any) {
+    // The backend consumes each captcha token after a registration attempt.
+    await captchaRef.value?.refresh()
     const msg = err?.response?.data?.message || err?.message || "";
     if (msg.includes("already exists")) {
       ElMessage.error("用户名已存在");
@@ -135,7 +138,7 @@ async function handleRegister() {
 </script>
 
 <template>
-  <AuthLayout>
+  <AuthLayout compact>
     <el-form
       ref="formRef"
       :model="form"
@@ -232,7 +235,7 @@ async function handleRegister() {
       </el-form-item>
 
       <el-form-item label="图形验证码" prop="captchaCode">
-        <CaptchaField v-model="form.captchaCode" @challenge="form.captchaToken = $event" @submit="handleRegister" />
+        <CaptchaField ref="captchaRef" v-model="form.captchaCode" @challenge="form.captchaToken = $event" @submit="handleRegister" />
       </el-form-item>
 
       <div style="text-align:center;margin:8px 0 12px">

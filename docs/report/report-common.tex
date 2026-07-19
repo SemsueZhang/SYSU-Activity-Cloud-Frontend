@@ -1,0 +1,34 @@
+% 公共排版文件（使用 XeLaTeX 编译）
+\usepackage[a4paper,margin=2.35cm]{geometry}
+\usepackage{booktabs,longtable,tabularx,array,multirow,enumitem}
+\usepackage{graphicx,xcolor,amsmath,hyperref,lastpage,fancyhdr}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc}
+\hypersetup{colorlinks=true,linkcolor=blue!60!black,urlcolor=blue!60!black,citecolor=blue!60!black,pdftitle={逸仙活动云课程报告}}
+\setlist{itemsep=2pt,topsep=3pt,leftmargin=2em}
+\setlength{\parindent}{2em}
+\setlength{\headheight}{15pt}
+\renewcommand{\arraystretch}{1.35}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\reportcover}[1]{%
+  \begin{titlepage}
+  \begin{center}
+  \vspace*{3cm}{\zihao{1}\bfseries 中山大学\\[0.6cm]《软件工程》期末大作业\par}
+  \vspace{2.5cm}{\zihao{2}\bfseries #1\par}
+  \end{center}
+  \vspace{2cm}
+  \begin{center}
+  \begin{tabular}{l}
+  {\Large 项目名称：逸仙活动云——中山大学校园活动云平台}\\
+  {\Large 小组成员：钟梓俊\quad 邱剑波\quad 张宸睿}\\
+  {\Large 指导老师：王可泽}
+  \end{tabular}
+  \end{center}
+  \vfill
+  \begin{center}
+  {\large 2026 年 7 月 16 日\par}
+  \end{center}
+  \end{titlepage}}
+
+\pagestyle{fancy}\fancyhf{}\lhead{逸仙活动云}\rhead{软件工程期末大作业}\cfoot{第 \thepage\ 页，共 \pageref{LastPage} 页}
+\setcounter{tocdepth}{2}

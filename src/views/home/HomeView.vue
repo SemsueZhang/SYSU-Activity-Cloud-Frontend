@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { TrendCharts, Collection, Clock, Calendar, Location, User, ArrowRight } from '@element-plus/icons-vue'
+import { TrendCharts, Collection, Clock, Calendar, Location, User } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useHomePage } from '@/composables/useHomePage'
 import NavHeader from '@/components/NavHeader.vue'
@@ -9,7 +9,7 @@ import FooterBar from '@/components/FooterBar.vue'
 
 const {
   auth, router,
-  hotActivities, activityTypeList, loading, error, scheduleError, searchKeyword,
+  hotActivities, recommendations, activityTypeList, loading, error, scheduleError, searchKeyword,
   currentHotIndex, selectHotActivity,
   activeNav, selectNav,
   currentYear, currentMonth, selectedDate, weekDays,
@@ -51,9 +51,6 @@ const {
               <el-icon class="section-title-icon"><TrendCharts /></el-icon>
               热门活动
             </h2>
-            <el-button text class="section-more" @click="router.push('/activities')">
-              查看全部 <el-icon><ArrowRight /></el-icon>
-            </el-button>
           </div>
           <template v-if="hotActivities.length > 0">
           <article class="hot-carousel" tabindex="0" role="link" :aria-label="`查看热门活动：${hotActivities[currentHotIndex].title}`" @click="goActivityDetail(hotActivities[currentHotIndex].id)" @keyup.enter="goActivityDetail(hotActivities[currentHotIndex].id)" @keydown.space.prevent="goActivityDetail(hotActivities[currentHotIndex].id)">
@@ -85,6 +82,11 @@ const {
             <el-empty :image-size="80" description="暂无活动" />
           </div>
         </div>
+
+        <section v-if="auth.isLoggedIn && !loading && recommendations.length" class="recommendation-section">
+          <div class="section-header"><h2 class="section-title"><el-icon class="section-title-icon"><Collection /></el-icon>为你推荐</h2></div>
+          <div class="recommendation-list"><button v-for="activity in recommendations" :key="activity.id" type="button" class="recommendation-item" @click="goActivityDetail(activity.id)"><strong>{{ activity.title }}</strong><span>{{ activity.reason }}</span></button></div>
+        </section>
 
         <section v-if="!loading && !error" id="section-categories" class="category-scroll">
           <div class="section-header">
@@ -172,6 +174,9 @@ const {
 }
 
 .hot-section { flex-shrink: 0; }
+.recommendation-section { flex-shrink: 0; margin-top: 14px; }
+.recommendation-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.recommendation-item { border: 1px solid #dceee3; border-radius: 10px; background: #fff; padding: 11px 13px; text-align: left; cursor: pointer; color: #0d5e3c; }.recommendation-item:hover { background: #f5fcf8; }.recommendation-item strong,.recommendation-item span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.recommendation-item span { margin-top:5px; color:#6b7671; font-size:12px; }
 
 .category-scroll {
   flex: 1;
@@ -392,5 +397,6 @@ const {
   .category-tabs :deep(.el-radio-button__inner) { padding: 6px 12px; font-size: 12px; }
   .cat-activity-item { padding: 12px 16px; flex-direction: column; align-items: flex-start; gap: 8px; }
   .cpi-tag { margin-left: 0; }
+  .recommendation-list { grid-template-columns: 1fr; }
 }
 </style>

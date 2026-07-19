@@ -6,16 +6,12 @@ const client = axios.create({
   timeout: 30000,
 })
 
-// 请求拦截器 — 自动附加 JWT
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
-// 响应拦截器 — 统一错误处理
 client.interceptors.response.use(
   (res) => res,
   (err) => {
@@ -23,6 +19,7 @@ client.interceptors.response.use(
       ElMessage.error('网络连接失败，请检查后端服务是否运行')
       return Promise.reject(err)
     }
+
     const { status, data } = err.response
     if (status === 401) {
       localStorage.removeItem('token')
@@ -34,6 +31,10 @@ client.interceptors.response.use(
       }
     } else if (status === 403) {
       ElMessage.error('权限不足')
+    } else if (status === 422) {
+      ElMessage.error(data?.message || data?.error || '提交内容格式不正确，请检查表单')
+    } else if (status === 429) {
+      ElMessage.error(data?.message || '请求过于频繁，请稍后再试')
     } else if (status >= 500) {
       ElMessage.error('服务器内部错误')
     } else if (data?.message) {

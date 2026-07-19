@@ -120,6 +120,7 @@ defineEmits<{
 }
 .nav-profile,.nav-register { color: #fff !important; font-weight: 600; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }
 .nav-profile:hover,.nav-register:hover,.nav-profile:focus-visible,.nav-register:focus-visible { color: #dff8e9 !important; }
+.nav-profile:hover,.nav-register:hover,.nav-profile:focus-visible,.nav-register:focus-visible { background-color: transparent !important; }
 
 @media (max-width: 768px) {
   .nav-brand-title { font-size: 22px; }

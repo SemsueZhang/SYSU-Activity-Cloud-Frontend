@@ -1,5 +1,5 @@
 <template>
-  <div class="auth-wrapper">
+  <div class="auth-wrapper" :class="{ compact }">
     <AuthBackground />
     <AuthHeader />
     <div class="half-transparent-card">
@@ -11,6 +11,8 @@
 <script setup lang="ts">
 import AuthBackground from './AuthBackground.vue'
 import AuthHeader from './AuthHeader.vue'
+
+defineProps<{ compact?: boolean }>()
 </script>
 
 <style scoped>
@@ -38,6 +40,20 @@ import AuthHeader from './AuthHeader.vue'
     0 24px 60px rgba(0, 0, 0, 0.08),
     0 1px 3px rgba(0, 0, 0, 0.05);
   animation: card-enter 0.8s ease-out;
+}
+
+.auth-wrapper.compact {
+  align-items: flex-start;
+  box-sizing: border-box;
+  min-height: 100dvh;
+  height: auto;
+  overflow-y: auto;
+  padding: 176px 16px 24px;
+}
+
+.compact .half-transparent-card {
+  width: min(540px, 92vw);
+  padding: 22px 28px 18px;
 }
 
 @keyframes card-enter {
@@ -141,6 +157,8 @@ import AuthHeader from './AuthHeader.vue'
     padding: 24px 20px 20px;
     width: 92vw;
   }
+
+  .auth-wrapper.compact { padding-top: 150px; }
 
   .el-row :deep(.el-col) {
     width: 100% !important;

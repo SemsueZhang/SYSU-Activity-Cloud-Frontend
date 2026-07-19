@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import type { Activity } from '@/api/activities'
-import { listActivities } from '@/api/activities'
+import { getPersonalizedRecommendations, listActivities, type RecommendedActivity } from '@/api/activities'
 import { getCalendarEvents, type CalendarEvent } from '@/api/calendar'
 
 function localDateKey(date: Date) {
@@ -15,6 +15,7 @@ export function useHomePage() {
   const router = useRouter()
 
   const hotActivities = ref<Activity[]>([])
+  const recommendations = ref<RecommendedActivity[]>([])
   const activityTypeList = ['讲座', '晚会', '竞赛', '论坛', '展览', '招聘', '体育', '其他']
   const loading = ref(true)
   const error = ref('')
@@ -199,6 +200,12 @@ export function useHomePage() {
     router.push(`/activity/${id}`)
   }
 
+  async function fetchRecommendations() {
+    if (!auth.isLoggedIn) { recommendations.value = []; return }
+    try { recommendations.value = (await getPersonalizedRecommendations()).data.items || [] }
+    catch { recommendations.value = [] }
+  }
+
   function handleSearch() {
     const q = searchKeyword.value.trim()
     router.push({ path: '/search', query: q ? { q } : {} })
@@ -214,14 +221,16 @@ export function useHomePage() {
     else stopHotCarousel()
   })
   watch([currentYear, currentMonth], fetchSchedule)
+  watch(() => auth.isLoggedIn, fetchRecommendations)
   onMounted(() => {
     fetchData()
     fetchSchedule()
+    fetchRecommendations()
   })
   onUnmounted(stopHotCarousel)
   return {
     auth, router,
-    hotActivities, activityTypeList, loading, error, scheduleError, searchKeyword,
+    hotActivities, recommendations, activityTypeList, loading, error, scheduleError, searchKeyword,
     currentHotIndex, selectHotActivity,
     activeNav, selectNav,
     currentYear, currentMonth, selectedDate, weekDays,

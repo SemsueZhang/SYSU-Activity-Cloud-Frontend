@@ -1,0 +1,10 @@
+\contentsline {section}{\numberline {1}目标与配置项范围}{1}{section.1}%
+\contentsline {section}{\numberline {2}版本控制与基线策略}{1}{section.2}%
+\contentsline {section}{\numberline {3}环境与密钥管理}{2}{section.3}%
+\contentsline {section}{\numberline {4}持续集成与制品管理}{2}{section.4}%
+\contentsline {section}{\numberline {5}部署流程}{2}{section.5}%
+\contentsline {section}{\numberline {6}监控、日志、备份和故障处置}{3}{section.6}%
+\contentsline {section}{\numberline {7}变更、回滚与演化}{3}{section.7}%
+\contentsline {section}{\numberline {8}现有配置项核对与生产约束}{4}{section.8}%
+\contentsline {section}{\numberline {9}发布前检查清单}{4}{section.9}%
+\contentsline {section}{\numberline {10}运维责任边界}{4}{section.10}%

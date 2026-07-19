@@ -67,5 +67,25 @@ export function registerWithEmail(data: RegisterVerifyRequest) {
 }
 
 export function requestPasswordReset(email: string) {
-  return client.post<{ message: string }>('/auth/forgot-password', { email })
+  return client.post<{ message: string; code?: string; expires_in?: number }>('/auth/forgot-password', { email })
+}
+
+export function resetPassword(data: { email: string; verification_code: string; password: string }) {
+  return client.post<{ message: string }>('/auth/reset-password', data)
+}
+
+export interface PublisherApplication {
+  id: number
+  status: 'pending' | 'approved' | 'rejected'
+  reason?: string | null
+  review_comment?: string | null
+  created_at: string
+}
+
+export function getMyPublisherApplication() {
+  return client.get<{ item: PublisherApplication | null }>('/auth/publisher-applications/mine')
+}
+
+export function applyForPublisher(reason = '') {
+  return client.post<{ item: PublisherApplication }>('/auth/publisher-applications', { reason })
 }

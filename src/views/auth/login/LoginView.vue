@@ -18,6 +18,7 @@ const redirectTarget = computed(() => {
 })
 
 const formRef = ref<FormInstance>()
+const captchaRef = ref<{ refresh: () => Promise<void> } | null>(null)
 const loading = ref(false)
 const showPwd = ref(false)
 const rememberMe = ref(localStorage.getItem("remembered_user") !== null)
@@ -58,6 +59,8 @@ async function handleLogin() {
     ElMessage.success("登录成功")
     router.replace(redirectTarget.value || "/")
   } catch (err: any) {
+    // A captcha token is one-time-use, including after a failed login.
+    await captchaRef.value?.refresh()
     const msg = err?.response?.data?.message || err?.message || ""
     if (msg.includes("invalid credentials")) {
       ElMessage.error("用户名或密码错误，请重试")
@@ -119,7 +122,7 @@ async function handleLogin() {
       </el-form-item>
 
       <el-form-item label="图形验证码" prop="captchaCode">
-        <CaptchaField v-model="form.captchaCode" @challenge="form.captchaToken = $event" @submit="handleLogin" />
+        <CaptchaField ref="captchaRef" v-model="form.captchaCode" @challenge="form.captchaToken = $event" @submit="handleLogin" />
       </el-form-item>
 
       <el-form-item>

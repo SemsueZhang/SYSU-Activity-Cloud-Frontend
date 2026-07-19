@@ -1,0 +1,86 @@
+\documentclass[12pt,a4paper]{ctexart}
+\input{../report-common.tex}
+\begin{document}
+\reportcover{系统建模报告}
+\pagenumbering{Roman}\tableofcontents\clearpage\pagenumbering{arabic}
+\docmeta
+\section{建模范围与约定}
+模型以“活动”作为外部领域概念。为兼容既有后端，持久化模型中使用 \texttt{Poster}，通过 API 适配为前端 \texttt{Activity}；图中以“活动”表述业务含义。用例覆盖访客、用户、发布者、管理员和外部服务，重点展示审核闭环、权限边界及核心数据关系。
+
+\section{用例模型}
+\begin{center}
+\begin{tikzpicture}[font=\small,actor/.style={draw,rounded corners,minimum width=1.4cm,minimum height=.55cm,fill=blue!8},use/.style={draw,ellipse,minimum width=2.1cm,minimum height=.6cm,fill=green!7},line/.style={-Latex,thick}]
+\node[actor] (guest) at (0,4.2) {访客};\node[actor] (user) at (0,2.5) {普通用户};\node[actor] (pub) at (0,.8) {发布者};\node[actor] (admin) at (0,-1) {管理员};
+\draw[rounded corners,thick] (2,-1.7) rectangle (10,5.1);\node at (6,4.8) {逸仙活动云};
+\node[use] (browse) at (4,4.0) {浏览/检索活动};\node[use] (auth) at (7.7,4.0) {注册、登录};
+\node[use] (personal) at (4,2.5) {报名、收藏、日历、订阅};\node[use] (detail) at (7.7,2.5) {查看详情与通知};
+\node[use] (publish) at (4,.65) {创建、编辑、提交活动};\node[use] (review) at (7.7,.65) {审核活动/发布者};
+\node[use] (source) at (4,-.95) {管理数据源};\node[use] (audit) at (7.7,-.95) {查询审计/受限导出};
+\draw[line] (guest)--(browse);\draw[line] (guest)--(auth);\draw[line] (user)--(auth);\draw[line] (user)--(personal);\draw[line] (user)--(detail);\draw[line] (pub)--(publish);\draw[line] (pub)--(detail);\draw[line] (admin)--(review);\draw[line] (admin)--(source);\draw[line] (admin)--(audit);
+\end{tikzpicture}
+\end{center}
+
+\noindent\textbf{用例说明（UC-03：提交并审核活动）。} 前置条件：发布者已登录且拥有发布权限。基本流程：创建/修改草稿→提交审核→管理员在队列查看→批准或驳回→系统更新状态、写入审核意见和审计日志；批准时触发知识关联和订阅通知。备选流程：草稿以外状态再次提交、非管理员审核或参数非法均返回错误；依赖服务异常时事务不得将活动误标为已发布。
+
+\section{领域类模型}
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize,cls/.style={draw,rounded corners,align=left,minimum width=2.55cm,fill=blue!5},rel/.style={-Latex,thick}]
+\node[cls] (user) at (0,3.2) {\textbf{User}\\id, username, email\\password\_hash, role};
+\node[cls] (activity) at (4.3,3.2) {\textbf{Activity/Poster}\\id, title, summary\\event\_time, status};
+\node[cls] (reg) at (8.7,4.2) {\textbf{Registration}\\user\_id, poster\_id\\name, student\_id};
+\node[cls] (fav) at (8.7,2.2) {\textbf{Favorite}\\user\_id, poster\_id};
+\node[cls] (audit) at (0,1.25) {\textbf{AuditLog}\\actor\_id, action\\target\_type, target\_id};
+\node[cls] (source) at (0,-1.0) {\textbf{DataSource}\\base\_url, allowed\_domains\\enabled, crawl\_mode};
+\node[cls] (node) at (4.3,-1.0) {\textbf{KnowledgeNode}\\name, node\_type, alias};
+\node[cls] (pn) at (8.7,-1.0) {\textbf{PosterNode}\\poster\_id, node\_id\\relation\_type};
+\draw[rel] (user)--node[above]{创建 1..*}(activity);\draw[rel] (activity.east)--node[above]{0..*}(reg.west);\draw[rel] (activity.east)--node[below]{0..*}(fav.west);\draw[rel] (user)--node[left]{记录}(audit);\draw[rel] (source.east)--node[below]{来源}(node.west);\draw[rel] (node)--(pn);\draw[rel] (activity.south east)--(pn.north west);
+\end{tikzpicture}
+\end{center}
+\noindent 关联实体还包括 \texttt{Subscription}、\texttt{Notification}、\texttt{UserCalendarEvent}、\texttt{PublisherApplication}、\texttt{PosterLink} 和 \texttt{CrawlLog}。报名、收藏和日历事件均以 \texttt{(user\_id, poster\_id)} 唯一约束保证幂等；知识节点以名称和类型唯一，降低同义实体重复的风险。
+
+\section{时序模型：发布审核}
+\begin{center}
+\begin{tikzpicture}[font=\small,life/.style={draw,fill=blue!7,minimum width=1.55cm,minimum height=.55cm},msg/.style={-Latex,thick}]
+\foreach \x/\n in {0/发布者,3/前端,6/API 服务,9/数据库,12/管理员}{\node[life] (n\x) at (\x,0) {\n};\draw[dashed] (\x,-.35)--(\x,-6.1);}
+\draw[msg] (n0.south) ++(0,-.55)--node[above]{1. 提交草稿}(n3.south |- 0,-.55);
+\draw[msg] (n3.south |- 0,-1.25)--node[above]{2. POST /submit + JWT}(n6.south |- 0,-1.25);
+\draw[msg] (n6.south |- 0,-1.95)--node[above]{3. 校验角色/状态，更新 pending\_review}(n9.south |- 0,-1.95);
+\draw[msg] (n9.south |- 0,-2.65)--node[below]{4. 返回活动}(n6.south |- 0,-2.65);
+\draw[msg] (n6.south |- 0,-3.35)--node[below]{5. 返回结果}(n3.south |- 0,-3.35);
+\draw[msg] (n12.south |- 0,-4.05)--node[above]{6. 获取审核队列}(n6.south |- 0,-4.05);
+\draw[msg] (n12.south |- 0,-4.75)--node[above]{7. approve/reject}(n6.south |- 0,-4.75);
+\draw[msg] (n6.south |- 0,-5.45)--node[above]{8. 更新状态、审计、通知}(n9.south |- 0,-5.45);
+\end{tikzpicture}
+\end{center}
+
+\section{状态模型：活动生命周期}
+\begin{center}
+\begin{tikzpicture}[font=\small,state/.style={draw,rounded corners,minimum width=2.0cm,minimum height=.65cm,fill=orange!10},arr/.style={-Latex,thick}]
+\node[state] (draft) {draft（草稿）};\node[state] (pending) [right=2cm of draft] {pending\_review（待审）};\node[state] (published) [right=2cm of pending] {published（已发布）};\node[state] (rejected) [below=1.3cm of pending] {rejected（已驳回）};
+\draw[arr] (draft)--node[above]{提交}(pending);\draw[arr] (pending)--node[above]{批准}(published);\draw[arr] (pending)--node[right]{驳回}(rejected);\draw[arr] (rejected)--node[below]{修改后重新提交}(draft);
+\draw[arr] (draft) edge[loop below] node{编辑/保存} (draft);
+\end{tikzpicture}
+\end{center}
+状态转换由后端校验而非仅由前端按钮控制。当前实现允许管理员审核待审或草稿活动；提交前的业务规则禁止非草稿重复提交。生产演化时可补充撤回、下线、归档和过期状态及相应迁移策略。
+
+\section{模型一致性与可追溯性}
+用例中的每个写操作对应 API 蓝图与服务层；类图中的核心实体存在于 SQLAlchemy 模型；时序中的权限检查由 JWT 和角色装饰器执行；状态图对应提交/审核接口的状态判断。需求变更时应同时检查四种模型、接口契约、数据库迁移和测试用例，避免模型与代码脱节。
+
+\section{实体职责、基数与不变式}
+\begin{tabularx}{\textwidth}{p{2.35cm}p{2.25cm}Y}
+\toprule 关系 & 基数 & 业务不变式 \\\midrule
+User—Activity & 1 : 0..* & 活动必须有创建者；创建者删除/停用时应有转移或保留策略。 \\
+User—Registration—Activity & 0..* : 1 : 0..* & \texttt{(user\_id, poster\_id)} 唯一；报名信息不允许跨用户读取。 \\
+User—Favorite/Calendar—Activity & 0..* : 1 : 0..* & 同一关系唯一；取消操作应幂等，前端列表和日历保持一致。 \\
+Activity—PosterNode—KnowledgeNode & 0..* : 1 : 0..* & \texttt{(poster\_id,node\_id,relation\_type)} 唯一，节点名称与类型组合唯一。 \\
+DataSource—CrawlLog & 1 : 0..* & 数据源 URL、允许域和抓取模式在写入前校验；日志保留执行状态和统计。 \\
+User—AuditLog & 1 : 0..* & 审核、合并、重建等治理动作必须记录 actor、动作、目标和时间。 \\
+\bottomrule
+\end{tabularx}
+
+\section{接口边界对象}
+模型区分三类对象：\textbf{传输对象}（HTTP JSON 的 Activity、分页和错误响应）、\textbf{领域对象}（活动、审核、订阅、知识关系）与\textbf{持久化对象}（SQLAlchemy 的 Poster 等）。边界适配的责任是字段重命名、日期格式化、空值和错误语义归一，不能在视图组件中隐式完成；这样即使后端表结构重构，前端用例和页面领域语义仍保持稳定。
+
+\section{补充时序：报名与幂等}
+用户从详情页提交报名时，前端先校验必填资料并携带 JWT；API 校验身份和活动可报名性，再以用户—活动唯一约束创建关系。若同一请求重复到达，服务应返回既有记录或明确的冲突语义，而非产生重复报名。成功后前端刷新“我报名的活动”和日历；失败时保持原视图状态并显示错误。该序列是 FR-04 的关键回归路径，需同时覆盖重复提交、取消、无 token 和活动不存在四种分支。
+\end{document}

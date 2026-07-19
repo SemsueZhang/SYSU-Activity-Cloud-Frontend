@@ -120,7 +120,23 @@ export default [
     handler: async (req) => {
       const { email } = await parseBody(req)
       if (!email || !String(email).includes('@')) return { __status: 422, message: '请输入有效的邮箱地址' }
-      return { message: '重置说明已发送' }
+      const code = String(Math.floor(100000 + Math.random() * 900000))
+      VERIFICATION_CODES[`reset:${email}`] = code
+      return { message: '重置验证码已发送', code }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/reset-password',
+    handler: async (req) => {
+      const { email, verification_code, password } = await parseBody(req)
+      if (!email || !verification_code || String(password || '').length < 6) return { __status: 422, message: '请完整填写邮箱、验证码和新密码' }
+      if (VERIFICATION_CODES[`reset:${email}`] !== String(verification_code)) return { __status: 422, message: '验证码错误或已过期' }
+      const matched = findUser(email)
+      if (!matched) return { __status: 422, message: '验证码错误或已过期' }
+      matched.password = password
+      delete VERIFICATION_CODES[`reset:${email}`]
+      return { message: '密码已重置' }
     },
   },
 ]

@@ -1,0 +1,10 @@
+\contentsline {section}{\numberline {1}测试目标与范围}{1}{section.1}%
+\contentsline {section}{\numberline {2}测试策略}{1}{section.2}%
+\contentsline {section}{\numberline {3}测试环境与准入/退出准则}{2}{section.3}%
+\contentsline {section}{\numberline {4}核心测试用例}{2}{section.4}%
+\contentsline {section}{\numberline {5}质量保证机制}{3}{section.5}%
+\contentsline {section}{\numberline {6}缺陷管理}{4}{section.6}%
+\contentsline {section}{\numberline {7}已知限制与改进}{4}{section.7}%
+\contentsline {section}{\numberline {8}本次复核执行记录（2026-07-18）}{5}{section.8}%
+\contentsline {section}{\numberline {9}缺陷与阻塞项清单}{6}{section.9}%
+\contentsline {section}{\numberline {10}需求—测试追踪补充}{6}{section.10}%

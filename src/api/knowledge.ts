@@ -3,7 +3,10 @@ import client from './client'
 export interface KnowledgeNode {
   id: number
   name: string
-  node_type: 'time' | 'place' | 'organization' | 'topic' | string
+  node_type: 'time' | 'place' | 'organization' | 'topic' | 'source' | string
+  alias?: string | null
+  description?: string | null
+  source_url?: string | null
 }
 
 export interface RelatedActivity {
@@ -17,6 +20,7 @@ export interface RelatedActivity {
 export interface ActivityKnowledgeContext {
   nodes: KnowledgeNode[]
   related: RelatedActivity[]
+  source?: { name?: string; url?: string }
 }
 
 function arrayOf(value: unknown): unknown[] {
@@ -37,15 +41,24 @@ function relatedOf(value: any): RelatedActivity {
  * Activity so presentation code never needs to know the backend's poster model.
  */
 export async function getActivityKnowledgeContext(id: number): Promise<ActivityKnowledgeContext> {
-  const { data } = await client.get<any>(`/posters/${id}/related`)
+  const { data } = await client.get<any>(`/activities/${id}/related`)
   return {
-    nodes: arrayOf(data.nodes ?? data.knowledge_nodes ?? data.direct_nodes).map(nodeOf).filter((node) => node.name && node.node_type !== 'source'),
+    nodes: arrayOf(data.nodes ?? data.knowledge_nodes ?? data.direct_nodes).map(nodeOf).filter((node) => node.name),
     related: arrayOf(data.related ?? data.related_posters ?? data.items).map(relatedOf).filter((item) => item.id && item.title),
+    source: data.source ? { name: data.source.name, url: data.source.url ?? data.source.source_url } : undefined,
   }
 }
 
 export function listKnowledgeNodes(params?: { q?: string; node_type?: string }) {
   return client.get<{ items: KnowledgeNode[] }>('/knowledge/nodes', { params })
+}
+
+export function getKnowledgeNode(id: number) {
+  return client.get<{ item: KnowledgeNode & { posters?: Array<{ relation_type: string; matched_by: string; poster: RelatedActivity }> } }>(`/knowledge/nodes/${id}`)
+}
+
+export function rebuildKnowledge(data?: { status?: string; source_type?: string; rebuild_embeddings?: boolean }) {
+  return client.post<{ total: number; succeeded: number; failed: number; errors: Array<{ id: number; error: string }>; embeddings?: { task_id: string } | null }>('/knowledge/rebuild', data || {})
 }
 
 export function subscribeToKnowledgeNode(nodeId: number) {

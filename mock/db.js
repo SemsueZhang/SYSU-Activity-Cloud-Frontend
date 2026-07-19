@@ -35,6 +35,7 @@ export function getNextUploadId() { return String(_nextUploadId++) }
 export const USER_STATE = {
   favorites: { 1: [1, 3], 2: [2] },
   registrations: {},
+  registrationTimes: {},
   subscriptions: { 1: [{ id: 1, keyword: '人工智能', created_at: '2026-05-20T08:00:00' }], 2: [] },
   notifications: { 1: [{ id: 1, title: '新活动待审核', body: '有 1 条活动等待审核。', read: false, created_at: '2026-05-25T09:00:00' }], 2: [{ id: 2, title: '活动提醒', body: '校园十大歌手决赛将在本周举行。', read: false, created_at: '2026-05-24T09:00:00' }] },
 }

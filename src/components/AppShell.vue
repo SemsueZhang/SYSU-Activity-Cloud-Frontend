@@ -70,6 +70,7 @@ function logout() {
 .header-nav { margin-left: auto; display: flex; gap: 2px; align-items: center; white-space: nowrap; }
 .header-nav :deep(.el-button),.header-nav :deep(.el-button span) { color: #fff !important; font-weight: 600; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }
 .header-nav :deep(.el-button.is-text:hover),.header-nav :deep(.el-button.is-text:focus-visible) { color: #dff8e9 !important; }
+.header-nav :deep(.el-button.is-text:hover),.header-nav :deep(.el-button.is-text:focus-visible) { background-color: transparent !important; }
 .header-nav :deep(.el-button.is-text:hover span),.header-nav :deep(.el-button.is-text:focus-visible span) { color: #dff8e9 !important; }
 .header-cta { border: 0; background: var(--brand-accent); }
 .app-main { max-width: 1280px; margin: 0 auto; padding: 32px 24px 48px; }

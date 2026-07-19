@@ -14,12 +14,20 @@ import profileRoutes from './routes/profile.js'
 import adminRoutes from './routes/admin.js'
 import knowledgeRoutes from './routes/knowledge.js'
 import uploadRoutes from './routes/upload.js'
+import extendedRoutes from './routes/extended.js'
 
 const PORT = 5000
 const routes = {}
 
 function registerRoute(routeDef) {
   const key = `${routeDef.method} ${routeDef.path}`
+  // Keep the specialised route modules authoritative.  Extended routes are
+  // optional conveniences and must never silently replace their auth/owner
+  // checks just because they are registered later.
+  if (routes[key]) {
+    console.warn(`  [Mock] duplicate route ignored: ${key}`)
+    return
+  }
   routes[key] = routeDef.handler
 }
 
@@ -69,8 +77,9 @@ activityRoutes.forEach(registerRoute)
 calendarRoutes.forEach(registerRoute)
 profileRoutes.forEach(registerRoute)
 adminRoutes.forEach(registerRoute)
-  knowledgeRoutes.forEach(registerRoute)
-  uploadRoutes.forEach(registerRoute)
+knowledgeRoutes.forEach(registerRoute)
+uploadRoutes.forEach(registerRoute)
+extendedRoutes.forEach(registerRoute)
 
 const server = http.createServer(async (req, res) => {
   // CORS 预检

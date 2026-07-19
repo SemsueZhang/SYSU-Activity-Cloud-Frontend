@@ -21,6 +21,10 @@ export interface Activity {
   activity_type: string | null
   created_at: string
   reject_reason?: string
+  cover_image_url?: string | null
+  hot_score?: number
+  created_by?: number
+  source_url?: string
 }
 
 export interface ActivityDetail extends Activity {
@@ -32,6 +36,9 @@ export interface ActivityDetail extends Activity {
   }
   favorite?: boolean
   registered?: boolean
+  in_calendar?: boolean
+  source_name?: string
+  content_html?: string | null
 }
 
 export interface ActivityForm {
@@ -44,6 +51,7 @@ export interface ActivityForm {
   activity_type: string | null
   tags: string[]
   attachments: Attachment[]
+  cover_image_url?: string | null
 }
 
 export interface ActivityListParams {
@@ -52,7 +60,29 @@ export interface ActivityListParams {
   page?: number
   per_page?: number
   activity_type?: string
-  sort?: 'created_at' | 'event_time'
+  sort?: 'created_at' | 'event_time' | 'popularity'
+}
+
+export interface RegistrationAttendee {
+  id: number
+  username: string
+  name: string
+  student_id: string
+  college: string
+  email?: string
+  registered_at: string | null
+}
+
+export interface RegistrationForm {
+  name: string
+  student_id: string
+  college: string
+  email: string
+}
+
+export interface RecommendedActivity extends Activity {
+  score: number
+  reason: string
 }
 
 export function listActivities(params?: ActivityListParams) {
@@ -66,12 +96,16 @@ export function getActivityById(id: number) {
   return client.get<ActivityDetail>(`/activities/${id}`)
 }
 
-export function registerForActivity(id: number) {
-  return client.post<{ success: boolean; registrations: number; already_registered: boolean }>(`/activities/${id}/register`)
+export function registerForActivity(id: number, form: RegistrationForm) {
+  return client.post<{ success: boolean; registrations: number; already_registered: boolean; registered?: boolean }>(`/activities/${id}/register`, form)
+}
+
+export function cancelRegistration(id: number) {
+  return client.delete<{ success: boolean; registrations: number; registered: boolean }>(`/activities/${id}/register`)
 }
 
 export function unregisterFromActivity(id: number) {
-  return client.delete<{ success: boolean; registrations: number }>(`/activities/${id}/register`)
+  return cancelRegistration(id)
 }
 
 export function setActivityFavorite(id: number, favorite: boolean) {
@@ -86,12 +120,28 @@ export function listRegisteredActivities(params?: Pick<ActivityListParams, 'page
   return client.get<ApiPage<Activity>>('/activities/registered', { params })
 }
 
+export function getPersonalizedRecommendations(limit = 6) {
+  return client.get<{ items: RecommendedActivity[] }>('/activities/recommendations', { params: { limit } })
+}
+
+export function listActivityRegistrations(id: number, params?: Pick<ActivityListParams, 'page' | 'per_page'>) {
+  return client.get<ApiPage<RegistrationAttendee>>(`/activities/${id}/registrations`, { params })
+}
+
+export function downloadActivityRegistrations(id: number) {
+  return client.get(`/activities/${id}/registrations.csv`, { responseType: 'blob' })
+}
+
 export function createActivity(data: ActivityForm) {
   return client.post<ActivityDetail>('/activities', data)
 }
 
 export function updateActivity(id: number, data: ActivityForm) {
   return client.put<ActivityDetail>(`/activities/${id}`, data)
+}
+
+export function deleteActivity(id: number) {
+  return client.delete<{ success: boolean }>(`/activities/${id}`)
 }
 
 export function submitActivityForReview(id: number) {

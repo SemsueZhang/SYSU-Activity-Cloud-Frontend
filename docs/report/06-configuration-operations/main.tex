@@ -1,0 +1,78 @@
+\documentclass[12pt,a4paper]{ctexart}
+\input{../report-common.tex}
+\begin{document}
+\reportcover{软件配置与运维文档}
+\pagenumbering{Roman}\tableofcontents\clearpage\pagenumbering{arabic}
+\docmeta
+\section{目标与配置项范围}
+本计划确保每个交付版本可识别、可重建、可部署、可监控和可恢复。配置管理对象包括：前端源码与锁文件、后端源码与依赖清单、接口契约、测试和文档、环境变量样例、Dockerfile/Compose/Gunicorn 配置、数据库 schema/初始化数据、CI 工作流及发布制品。\textbf{不纳入仓库的配置项}包括 \texttt{.env}、JWT/邮件/AI 密钥、真实数据库、用户附件和生产日志。
+
+\section{版本控制与基线策略}
+前端、后端为相邻独立仓库，发布时以兼容版本对组成系统基线，记录：前端 commit/tag、后端 commit/tag、接口契约版本、数据库 schema 版本、镜像摘要和环境模板版本。主分支保持可构建；功能在短生命周期分支完成，经评审与 CI 通过后合并。建议 tag 使用 \texttt{vMAJOR.MINOR.PATCH}，例如 \texttt{v1.0.0}；破坏性接口或数据库变更递增 MAJOR，兼容功能递增 MINOR，缺陷修复递增 PATCH。
+
+提交应小而聚焦，消息包含模块与目的；合并请求关联需求/缺陷编号、验证证据和文档更新。发生紧急生产修复时，从受影响 tag 建立 hotfix，修复后同时合回主分支和发布分支。禁止强制覆盖共享历史、提交密钥或将构建产物/本地数据库作为源代码基线。
+
+\section{环境与密钥管理}
+\begin{tabularx}{\textwidth}{p{2.0cm}Y Y}
+\toprule 环境 & 配置原则 & 数据/依赖 \\\midrule
+本地开发 & 前端复制 \texttt{.env.example} 为 \texttt{.env.local}；后端复制为 \texttt{.env}；默认 API 代理指向本地。 & 可用 Mock 或 SQLite；不使用生产密钥/数据。 \\
+测试/CI & 变量由 CI Secret 或临时环境注入，测试配置使用内存 SQLite、禁用真实邮件/LLM/Redis。 & 可重复、隔离、可清理。 \\
+预发布 & 与生产拓扑尽量一致，使用独立数据库、Redis、域名和最小权限账号。 & 脱敏样本数据，执行迁移/回滚演练。 \\
+生产 & 密钥存入受控 Secret 管理服务，容器只读环境注入；HTTPS、备份和监控必须启用。 & PostgreSQL、Redis、Worker/Beat、反向代理。 \\
+\bottomrule
+\end{tabularx}
+
+需要重点配置的变量包括 \texttt{DATABASE\_URL}、\texttt{REDIS\_URL}、\texttt{JWT\_SECRET\_KEY}、CORS/前端 API 地址、邮件服务和 AI/搜索服务凭据。密钥不得记录在报告、Issue、日志或截图中；发现泄露后立即撤销、轮换、审计访问并重建制品。\texttt{.env.example} 只保留变量名与无敏感示例。
+
+\section{持续集成与制品管理}
+前端现有 GitHub Actions 在 push/PR 上执行：检出代码、Node 22、\texttt{npm ci}、安装 Chromium、\texttt{npm run build}、\texttt{npm run test:unit}、\texttt{npm run test:e2e}。后端当前具备 pytest 测试资产和 Dockerfile；建议增加同等的 CI 工作流，执行依赖安装、pytest、静态检查、依赖漏洞扫描与镜像构建。发布制品应包含前端静态构建包、后端不可变镜像、SBOM/依赖清单、测试报告和 release notes，并以 tag 与 commit SHA 双重标识。
+
+\section{部署流程}
+\begin{center}
+\begin{tikzpicture}[font=\small,flowstep/.style={draw,rounded corners,align=center,minimum width=2.35cm,minimum height=.7cm,fill=blue!7},arr/.style={-Latex,thick}]
+\node[flowstep] (a) {1. 选择已验证 tag\\冻结变更};\node[flowstep] (b) [right=.55cm of a] {2. 构建/签名制品\\记录摘要};\node[flowstep] (c) [right=.55cm of b] {3. 备份数据库\\检查迁移};\node[flowstep] (d) [below=1.1cm of c] {4. 部署 Compose/服务\\注入 Secret};\node[flowstep] (e) [left=.55cm of d] {5. 健康与冒烟\\日志/指标检查};\node[flowstep] (f) [left=.55cm of e] {6. 宣布或回滚\\归档证据};
+\draw[arr] (a)--(b);\draw[arr] (b)--(c);\draw[arr] (c)--(d);\draw[arr] (d)--(e);\draw[arr] (e)--(f);
+\end{tikzpicture}
+\end{center}
+当前后端提供 \texttt{Dockerfile}、\texttt{docker-compose.yml} 与 Gunicorn 配置，Compose 定义 API、PostgreSQL、Redis、Worker、Beat 和数据卷；API 仅绑定 \texttt{127.0.0.1:5000}，生产应由反向代理暴露 HTTPS。部署前检查环境文件、镜像版本和卷挂载；运行 \texttt{docker compose up -d --build} 后访问 \texttt{GET /api/health}，再验证登录、活动查询和审核等最小业务流。首次启动自动建表只适于开发/演示，生产必须先执行受控迁移。
+
+\section{监控、日志、备份和故障处置}
+\begin{tabularx}{\textwidth}{p{2.3cm}Y Y}
+\toprule 领域 & 运行措施 & 告警/处置 \\\midrule
+可用性 & 反向代理探针 + \texttt{/api/health}；记录 API 5xx、延迟、容器重启数。 & 连续探针失败或错误率突增：停止发布、检查 API/数据库/Redis 日志，必要时回滚。 \\
+任务队列 & 记录任务成功/失败、重试、等待时间与抓取统计。 & 积压或失败激增：暂停问题数据源、检查 Worker/Redis 和外部依赖。 \\
+审计/安全 & 请求标识、脱敏搜索日志、审核与管理动作审计；限制日志保留和访问。 & 异常登录、越权或密钥泄露：撤销凭据、保全日志、评估数据影响并修复。 \\
+备份恢复 & PostgreSQL 每日全量、适当的日志/WAL 增量；备份加密、异地/独立存储，定期恢复演练。 & 恢复目标需由团队确定；恢复时先隔离故障环境，再恢复最近一致备份并验证核心数据。 \\
+\bottomrule
+\end{tabularx}
+
+建议指标包括 API 请求量、P50/P95/P99 延迟、4xx/5xx、数据库连接/慢查询、Redis 内存、队列深度、磁盘/卷使用率和备份最近成功时间。日志不得输出密码、JWT、完整邮箱验证码、身份证号或完整搜索词。保留策略、备份 RPO/RTO、告警接收人和演练日期应在实际部署前由团队填入运维值班表。
+
+\section{变更、回滚与演化}
+配置变更与代码变更同样需要评审和记录。数据库变更采用“先向后兼容扩展、应用双读写/回填、切换、再删除”的迁移策略；每次迁移必须有备份和回滚方案。发布后若健康检查、核心冒烟或错误指标不达标，应停止流量切换，恢复上一镜像和兼容 schema，保留日志与版本信息，创建缺陷并复盘。下一步优先落地 schema migration、后端 CI、镜像扫描、TLS/反向代理、集中指标与备份恢复演练，逐步将课程项目的可部署能力提升为可长期运维能力。
+
+\section{现有配置项核对与生产约束}
+\begin{tabularx}{\textwidth}{p{2.65cm}p{3.45cm}Y}
+\toprule 配置项 & 当前样例/位置 & 生产约束 \\\midrule
+\texttt{VITE\_API\_BASE\_URL} & 前端 \texttt{.env.example}，默认 \texttt{/api}。 & 同源代理保持 \texttt{/api}；跨域部署需显式 CORS 与 HTTPS。 \\
+\texttt{DATABASE\_URL} / \texttt{REDIS\_URL} & 后端 \texttt{.env.example}。 & 使用独立最小权限账号、TLS/网络隔离和备份；不得复用开发 SQLite。 \\
+\texttt{JWT\_SECRET\_KEY} & 样例含占位默认值。 & 部署时由 Secret 注入高熵随机值；泄露立即轮换，绝不提交真实值。 \\
+默认管理员凭据 & 样例中有开发账号密码。 & 仅用于本地演示；生产首次部署必须强制替换/禁用默认账户。 \\
+LLM/嵌入/MCP 凭据 & 后端样例提供可选变量。 & 仅在启用相应服务时注入，限制权限/配额；日志和异常中不得回显。 \\
+抓取限制 & 间隔、页数、超时、内网阻断变量。 & 按目标站点和合规要求调整，保留审计、失败重试和人工暂停开关。 \\
+\bottomrule
+\end{tabularx}
+
+\section{发布前检查清单}
+\begin{enumerate}
+\item 选择已通过质量门禁的前后端 commit/tag，并冻结接口和数据库迁移版本；
+\item 确认无真实密钥、\texttt{.env}、本地数据库或测试附件进入制品；
+\item 在预发布恢复备份、执行迁移及前端/后端冒烟，记录输出和镜像摘要；
+\item 复核反向代理 TLS、CORS、请求体限制、健康检查、日志脱敏与告警接收人；
+\item 部署后验证健康接口、登录、活动浏览、发布审核和审计查询；失败即按已验证版本回滚；
+\item 归档 release notes、配置变更、已知风险、监控链接和恢复点。
+\end{enumerate}
+
+\section{运维责任边界}
+课程项目当前代码提供 Docker/Compose 和健康检查\textbf{入口}，但没有证据表明已配置生产 TLS、集中监控、自动备份、分支保护或灾备演练。因此这些项目均列为上线前必做项而非“已完成运维”。每次运行事故由值班人员先止损和保全日志，再由开发、测试、运维共同完成根因分析、修复、回归验证和预防行动跟踪。
+\end{document}

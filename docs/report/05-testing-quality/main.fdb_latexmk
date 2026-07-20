@@ -1,13 +1,13 @@
 # Fdb version 4
-["xdvipdfmx"] 1784472922.31973 "main.xdv" "main.pdf" "main" 1784472927.33539 0
-  "main.xdv" 1784472919.9721 158768 c0098c247b16ae71bd9f0ded5ea995bc "xelatex"
+["xdvipdfmx"] 1784462346.18323 "main.xdv" "main.pdf" "main" 1784462350.61271 0
+  "main.xdv" 1784462343.33283 190204 a5b89f41b73da4bea206d5b80f675a6e "xelatex"
   (generated)
   "main.pdf"
   (rewritten before read)
-["xelatex"] 1784472909.39505 "d:/ZhangChenrui/Projects/SYSU-Activity-Cloud-Frontend/docs/report/03-architecture/main.tex" "main.xdv" "main" 1784472927.2027 0
+["xelatex"] 1784462331.18189 "d:/ZhangChenrui/Projects/SYSU-Activity-Cloud-Frontend/docs/report/05-testing-quality/main.tex" "main.xdv" "main" 1784462350.34453 0
   "../report-common.tex" 1784440198.51097 1394 50c6c7ba1d5ef1626dfcf6eee24305b3 ""
   "c:/Windows/Fonts/msyh.ttc" 1741575194.35312 19704352 fa04b86eb9c632ef04217c3e43d81c4d ""
-  "d:/ZhangChenrui/Projects/SYSU-Activity-Cloud-Frontend/docs/report/03-architecture/main.tex" 1784472889.51632 18865 a22e28fced57dce2737dde96e5423152 ""
+  "d:/ZhangChenrui/Projects/SYSU-Activity-Cloud-Frontend/docs/report/05-testing-quality/main.tex" 1784462322.33016 23309 3126541b4d8a1b8853a79708dcb2e203 ""
   "d:/texlive/2026/texmf-dist/fonts/map/fontname/texfonts.map" 1778593889.46724 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "d:/texlive/2026/texmf-dist/fonts/tfm/adobe/zapfding/pzdr.tfm" 1778606357.44516 1528 f853c4d1b4e0550255e02831fdc8496f ""
   "d:/texlive/2026/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm" 1778569053.71128 1004 54797486969f23fa377b128694d548df ""
@@ -174,9 +174,9 @@
   "d:/texlive/2026/texmf-dist/web2c/texmf.cnf" 1778568845.6577 43630 e9fa012910491fe5ae08a72c3c2997a7 ""
   "d:/texlive/2026/texmf-var/web2c/xetex/xelatex.fmt" 1778606732 5955222 28adc9860f26fda67b00c8f4c913aabf ""
   "d:/texlive/2026/texmf.cnf" 1778606428.65419 713 baa45e065482d44c4cd81b98ef72c63b ""
-  "main.aux" 1784472919.92693 3413 9421629f630ab4608d3e3fc12848da0d "xelatex"
-  "main.out" 1784472919.95604 2341 7f6bc059ab5858e9fc716a4131337fb3 "xelatex"
-  "main.toc" 1784472919.9721 1959 8fd002999daef519c9fe288860c97d55 "xelatex"
+  "main.aux" 1784462343.21211 4337 7342711b67fe437f5a8914286eaaf5e7 "xelatex"
+  "main.out" 1784462343.23253 2279 c6741df262e0596e5fb6d6c9a7e42cf9 "xelatex"
+  "main.toc" 1784462343.33184 2321 64ba36e7b9217d58f1cc9b979e624333 "xelatex"
   (generated)
   "main.aux"
   "main.log"

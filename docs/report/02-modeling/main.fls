@@ -1,8 +1,8 @@
-PWD D:/ZhangChenrui/Projects/SYSU-Activity-Cloud-Frontend/docs/report/03-architecture
+PWD D:/ZhangChenrui/Projects/SYSU-Activity-Cloud-Frontend/docs/report/02-modeling
 INPUT d:/texlive/2026/texmf.cnf
 INPUT d:/texlive/2026/texmf-dist/web2c/texmf.cnf
 INPUT d:/texlive/2026/texmf-var/web2c/xetex/xelatex.fmt
-INPUT d:/ZhangChenrui/Projects/SYSU-Activity-Cloud-Frontend/docs/report/03-architecture/main.tex
+INPUT d:/ZhangChenrui/Projects/SYSU-Activity-Cloud-Frontend/docs/report/02-modeling/main.tex
 OUTPUT main.log
 INPUT d:/texlive/2026/texmf-dist/tex/latex/ctex/ctexart.cls
 INPUT d:/texlive/2026/texmf-dist/tex/latex/ctex/ctexart.cls

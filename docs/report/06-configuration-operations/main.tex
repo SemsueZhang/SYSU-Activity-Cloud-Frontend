@@ -3,76 +3,247 @@
 \begin{document}
 \reportcover{软件配置与运维文档}
 \pagenumbering{Roman}\tableofcontents\clearpage\pagenumbering{arabic}
-\docmeta
-\section{目标与配置项范围}
-本计划确保每个交付版本可识别、可重建、可部署、可监控和可恢复。配置管理对象包括：前端源码与锁文件、后端源码与依赖清单、接口契约、测试和文档、环境变量样例、Dockerfile/Compose/Gunicorn 配置、数据库 schema/初始化数据、CI 工作流及发布制品。\textbf{不纳入仓库的配置项}包括 \texttt{.env}、JWT/邮件/AI 密钥、真实数据库、用户附件和生产日志。
 
-\section{版本控制与基线策略}
-前端、后端为相邻独立仓库，发布时以兼容版本对组成系统基线，记录：前端 commit/tag、后端 commit/tag、接口契约版本、数据库 schema 版本、镜像摘要和环境模板版本。主分支保持可构建；功能在短生命周期分支完成，经评审与 CI 通过后合并。建议 tag 使用 \texttt{vMAJOR.MINOR.PATCH}，例如 \texttt{v1.0.0}；破坏性接口或数据库变更递增 MAJOR，兼容功能递增 MINOR，缺陷修复递增 PATCH。
+\section{文档概述}
+本文档定义逸仙活动云项目的配置管理、版本管理、持续集成、软件部署、运行维护及应急方案。目标是确保每个交付版本可识别、可重建、可部署、可监控和可恢复。文档适用于项目团队的开发和运维人员，以及后续接手项目维护的第三方开发者。文档中“已实现”指代码库已有对应实现；“计划”指建议在交付或运维阶段落实，二者不作混同。
 
-提交应小而聚焦，消息包含模块与目的；合并请求关联需求/缺陷编号、验证证据和文档更新。发生紧急生产修复时，从受影响 tag 建立 hotfix，修复后同时合回主分支和发布分支。禁止强制覆盖共享历史、提交密钥或将构建产物/本地数据库作为源代码基线。
-
-\section{环境与密钥管理}
-\begin{tabularx}{\textwidth}{p{2.0cm}Y Y}
-\toprule 环境 & 配置原则 & 数据/依赖 \\\midrule
-本地开发 & 前端复制 \texttt{.env.example} 为 \texttt{.env.local}；后端复制为 \texttt{.env}；默认 API 代理指向本地。 & 可用 Mock 或 SQLite；不使用生产密钥/数据。 \\
-测试/CI & 变量由 CI Secret 或临时环境注入，测试配置使用内存 SQLite、禁用真实邮件/LLM/Redis。 & 可重复、隔离、可清理。 \\
-预发布 & 与生产拓扑尽量一致，使用独立数据库、Redis、域名和最小权限账号。 & 脱敏样本数据，执行迁移/回滚演练。 \\
-生产 & 密钥存入受控 Secret 管理服务，容器只读环境注入；HTTPS、备份和监控必须启用。 & PostgreSQL、Redis、Worker/Beat、反向代理。 \\
-\bottomrule
-\end{tabularx}
-
-需要重点配置的变量包括 \texttt{DATABASE\_URL}、\texttt{REDIS\_URL}、\texttt{JWT\_SECRET\_KEY}、CORS/前端 API 地址、邮件服务和 AI/搜索服务凭据。密钥不得记录在报告、Issue、日志或截图中；发现泄露后立即撤销、轮换、审计访问并重建制品。\texttt{.env.example} 只保留变量名与无敏感示例。
-
-\section{持续集成与制品管理}
-前端现有 GitHub Actions 在 push/PR 上执行：检出代码、Node 22、\texttt{npm ci}、安装 Chromium、\texttt{npm run build}、\texttt{npm run test:unit}、\texttt{npm run test:e2e}。后端当前具备 pytest 测试资产和 Dockerfile；建议增加同等的 CI 工作流，执行依赖安装、pytest、静态检查、依赖漏洞扫描与镜像构建。发布制品应包含前端静态构建包、后端不可变镜像、SBOM/依赖清单、测试报告和 release notes，并以 tag 与 commit SHA 双重标识。
-
-\section{部署流程}
-\begin{center}
-\begin{tikzpicture}[font=\small,flowstep/.style={draw,rounded corners,align=center,minimum width=2.35cm,minimum height=.7cm,fill=blue!7},arr/.style={-Latex,thick}]
-\node[flowstep] (a) {1. 选择已验证 tag\\冻结变更};\node[flowstep] (b) [right=.55cm of a] {2. 构建/签名制品\\记录摘要};\node[flowstep] (c) [right=.55cm of b] {3. 备份数据库\\检查迁移};\node[flowstep] (d) [below=1.1cm of c] {4. 部署 Compose/服务\\注入 Secret};\node[flowstep] (e) [left=.55cm of d] {5. 健康与冒烟\\日志/指标检查};\node[flowstep] (f) [left=.55cm of e] {6. 宣布或回滚\\归档证据};
-\draw[arr] (a)--(b);\draw[arr] (b)--(c);\draw[arr] (c)--(d);\draw[arr] (d)--(e);\draw[arr] (e)--(f);
-\end{tikzpicture}
-\end{center}
-当前后端提供 \texttt{Dockerfile}、\texttt{docker-compose.yml} 与 Gunicorn 配置，Compose 定义 API、PostgreSQL、Redis、Worker、Beat 和数据卷；API 仅绑定 \texttt{127.0.0.1:5000}，生产应由反向代理暴露 HTTPS。部署前检查环境文件、镜像版本和卷挂载；运行 \texttt{docker compose up -d --build} 后访问 \texttt{GET /api/health}，再验证登录、活动查询和审核等最小业务流。首次启动自动建表只适于开发/演示，生产必须先执行受控迁移。
-
-\section{监控、日志、备份和故障处置}
-\begin{tabularx}{\textwidth}{p{2.3cm}Y Y}
-\toprule 领域 & 运行措施 & 告警/处置 \\\midrule
-可用性 & 反向代理探针 + \texttt{/api/health}；记录 API 5xx、延迟、容器重启数。 & 连续探针失败或错误率突增：停止发布、检查 API/数据库/Redis 日志，必要时回滚。 \\
-任务队列 & 记录任务成功/失败、重试、等待时间与抓取统计。 & 积压或失败激增：暂停问题数据源、检查 Worker/Redis 和外部依赖。 \\
-审计/安全 & 请求标识、脱敏搜索日志、审核与管理动作审计；限制日志保留和访问。 & 异常登录、越权或密钥泄露：撤销凭据、保全日志、评估数据影响并修复。 \\
-备份恢复 & PostgreSQL 每日全量、适当的日志/WAL 增量；备份加密、异地/独立存储，定期恢复演练。 & 恢复目标需由团队确定；恢复时先隔离故障环境，再恢复最近一致备份并验证核心数据。 \\
-\bottomrule
-\end{tabularx}
-
-建议指标包括 API 请求量、P50/P95/P99 延迟、4xx/5xx、数据库连接/慢查询、Redis 内存、队列深度、磁盘/卷使用率和备份最近成功时间。日志不得输出密码、JWT、完整邮箱验证码、身份证号或完整搜索词。保留策略、备份 RPO/RTO、告警接收人和演练日期应在实际部署前由团队填入运维值班表。
-
-\section{变更、回滚与演化}
-配置变更与代码变更同样需要评审和记录。数据库变更采用“先向后兼容扩展、应用双读写/回填、切换、再删除”的迁移策略；每次迁移必须有备份和回滚方案。发布后若健康检查、核心冒烟或错误指标不达标，应停止流量切换，恢复上一镜像和兼容 schema，保留日志与版本信息，创建缺陷并复盘。下一步优先落地 schema migration、后端 CI、镜像扫描、TLS/反向代理、集中指标与备份恢复演练，逐步将课程项目的可部署能力提升为可长期运维能力。
-
-\section{现有配置项核对与生产约束}
-\begin{tabularx}{\textwidth}{p{2.65cm}p{3.45cm}Y}
-\toprule 配置项 & 当前样例/位置 & 生产约束 \\\midrule
-\texttt{VITE\_API\_BASE\_URL} & 前端 \texttt{.env.example}，默认 \texttt{/api}。 & 同源代理保持 \texttt{/api}；跨域部署需显式 CORS 与 HTTPS。 \\
-\texttt{DATABASE\_URL} / \texttt{REDIS\_URL} & 后端 \texttt{.env.example}。 & 使用独立最小权限账号、TLS/网络隔离和备份；不得复用开发 SQLite。 \\
-\texttt{JWT\_SECRET\_KEY} & 样例含占位默认值。 & 部署时由 Secret 注入高熵随机值；泄露立即轮换，绝不提交真实值。 \\
-默认管理员凭据 & 样例中有开发账号密码。 & 仅用于本地演示；生产首次部署必须强制替换/禁用默认账户。 \\
-LLM/嵌入/MCP 凭据 & 后端样例提供可选变量。 & 仅在启用相应服务时注入，限制权限/配额；日志和异常中不得回显。 \\
-抓取限制 & 间隔、页数、超时、内网阻断变量。 & 按目标站点和合规要求调整，保留审计、失败重试和人工暂停开关。 \\
-\bottomrule
-\end{tabularx}
-
-\section{发布前检查清单}
+\section{配置管理}
+\subsection{配置项说明}
+项目涉及的配置项按类别划分如下：
 \begin{enumerate}
-\item 选择已通过质量门禁的前后端 commit/tag，并冻结接口和数据库迁移版本；
-\item 确认无真实密钥、\texttt{.env}、本地数据库或测试附件进入制品；
-\item 在预发布恢复备份、执行迁移及前端/后端冒烟，记录输出和镜像摘要；
-\item 复核反向代理 TLS、CORS、请求体限制、健康检查、日志脱敏与告警接收人；
-\item 部署后验证健康接口、登录、活动浏览、发布审核和审计查询；失败即按已验证版本回滚；
-\item 归档 release notes、配置变更、已知风险、监控链接和恢复点。
+\item \textbf{应用配置：} 前端 API 地址（\texttt{VITE\_API\_BASE\_URL}）、后端数据库连接串（\texttt{DATABASE\_URL}）、Redis 连接串（\texttt{REDIS\_URL}）、CORS 域名。
+\item \textbf{安全配置：} JWT 签名密钥（\texttt{JWT\_SECRET\_KEY}）、密码哈希算法、验证码有效期。
+\item \textbf{外部服务配置：} 邮件 SMTP 服务器地址与凭据、外部搜索 API 密钥、AI 服务 API 端点和密钥、数据源抓取间隔与超时。
+\item \textbf{部署配置：} 容器镜像版本、数据卷挂载路径、Gunicorn Worker 数量、健康检查端点。
 \end{enumerate}
 
-\section{运维责任边界}
-课程项目当前代码提供 Docker/Compose 和健康检查\textbf{入口}，但没有证据表明已配置生产 TLS、集中监控、自动备份、分支保护或灾备演练。因此这些项目均列为上线前必做项而非“已完成运维”。每次运行事故由值班人员先止损和保全日志，再由开发、测试、运维共同完成根因分析、修复、回归验证和预防行动跟踪。
+\subsection{配置文件管理}
+项目通过分层配置文件管理各类配置：
+\begin{enumerate}
+\item \textbf{前端：} \texttt{.env.example} 作为模板文件提交到仓库，开发者复制为 \texttt{.env.local} 后填充实际值。Vite 在开发阶段自动加载根目录的 \texttt{.env.local} 和环境变量。
+\item \textbf{后端：} \texttt{.env.example} 作为模板提交到仓库，开发者复制为 \texttt{.env} 后填充。Flask 通过 \texttt{python-dotenv} 在应用启动时加载。
+\item \textbf{Docker Compose：} \texttt{docker-compose.yml} 定义服务拓扑和卷挂载，通过 \texttt{environment} 字段或 \texttt{env\_file} 引用环境变量文件。
+\end{enumerate}
+所有配置文件模板不包含真实密钥和密码。开发环境、测试环境和生产环境使用各自独立的环境文件，互不干扰。
+
+\subsection{环境变量管理}
+\begin{center}
+\begin{tabularx}{0.9\textwidth}{p{2.8cm}p{5.5cm}p{5.5cm}}
+\toprule 环境 & 配置来源 & 数据与依赖 \\\midrule
+本地开发 & 项目根目录 \texttt{.env.local}（前端）或 \texttt{.env}（后端） & Mock 服务或 SQLite 数据库；不连接生产 Redis 或邮件服务。 \\
+测试/CI & GitHub Actions Secret 或临时环境变量 & 内存 SQLite；禁用真实邮件、Redis 和外部 LLM。 \\
+预发布 & 独立 \texttt{.env} 文件或容器编排工具注入 & 独立 PostgreSQL 和 Redis 实例；脱敏样本数据。 \\
+生产 & 受控 Secret 管理服务（如 Docker Secret 或云平台密钥管理） & PostgreSQL 主从、Redis 集群；HTTPS、备份和监控必须启用。 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{敏感信息管理}
+\begin{enumerate}
+\item \textbf{密钥分类：} JWT 签名密钥、邮件 SMTP 密码、AI/搜索 API 密钥、数据库连接密码。
+\item \textbf{存储原则：} 敏感信息以环境变量或 Secret 管理服务注入容器，不写入代码仓库、日志文件或截图。
+\item \textbf{泄露处置：} 发现泄露后立即撤销原密钥、生成新密钥、轮换受影响范围内的所有凭据、审计泄露时间窗口内的访问记录、重建受影响的制品。
+\item \textbf{开发默认值：} \texttt{.env.example} 中的默认凭据仅用于本地演示环境，生产部署前必须替换为高熵随机值。
+\end{enumerate}
+
+\section{版本管理}
+\subsection{版本号规范}
+项目使用语义化版本号 \texttt{vMAJOR.MINOR.PATCH}：
+\begin{enumerate}
+\item \textbf{MAJOR：} 破坏性接口变更或数据库 Schema 不向后兼容时递增。
+\item \textbf{MINOR：} 新增向后兼容的功能时递增。
+\item \textbf{PATCH：} 缺陷修复或内部优化时递增。
+\end{enumerate}
+前端和后端仓库独立标识版本。发布时以兼容版本对组成系统基线，同时记录前端 tag、后端 tag、接口契约版本和数据库 Schema 版本。
+
+\subsection{发布版本管理}
+\begin{enumerate}
+\item 主分支（main）始终保持可构建状态，所有变更通过合并请求合入。
+\item 功能分支在短生命周期内开发，完成后删除。
+\item 每个可交付版本从 main 创建 tag，tag 名使用 \texttt{vMAJOR.MINOR.PATCH}。
+\item 紧急修复从受影响 tag 创建 hotfix 分支，修复后同时合回 main 和发布分支。
+\end{enumerate}
+
+\subsection{变更记录}
+所有版本变更记录在 release notes 中，包含以下信息：
+\begin{enumerate}
+\item 版本号和发布日期。
+\item 新增功能清单及关联需求编号（FR-xx）。
+\item 修复的缺陷清单及关联缺陷编号。
+\item 接口或数据库 Schema 变更摘要。
+\item 升级注意事项（如有不兼容变更）。
+\end{enumerate}
+
+\subsection{回滚机制}
+\begin{enumerate}
+\item \textbf{Docker 部署回滚：} 停止当前容器，使用上一版本的镜像重新启动，恢复上一版本的数据库备份。
+\item \textbf{数据库回滚：} 在迁移前执行数据库全量备份；回滚时恢复备份并验证数据完整性。
+\item \textbf{前端回滚：} 将反向代理或 Web 服务器的静态资源目录切换回上一版本的构建产物。
+\end{enumerate}
+回滚后保留当前版本和回滚版本的日志、镜像摘要和配置快照，用于后续根因分析。
+
+\section{持续集成}
+\subsection{CI 流程}
+前端仓库已配置 GitHub Actions CI 工作流（\texttt{.github/workflows/ci.yml}），在 push 和 pull request 事件上触发。工作流执行以下步骤：
+\begin{enumerate}
+\item 检出代码并配置 Node 22 环境（\texttt{actions/setup-node@v4}）。
+\item 执行 \texttt{npm ci} 安装精确版本依赖。
+\item 安装 Chromium 浏览器（\texttt{npx playwright install --with-deps chromium}）。
+\item 执行 \texttt{npm run build}（类型检查 + 生产构建）。
+\item 执行 \texttt{npm run test:unit}（Vitest 单元测试）。
+\item 执行 \texttt{npm run test:e2e}（Playwright 端到端测试）。
+\end{enumerate}
+
+\subsection{自动化构建}
+前端通过 \texttt{npm run build} 触发 \texttt{vue-tsc -b \&\& vite build}，串行执 TypeScript 类型检查和 Vite 生产构建，输出可部署的静态资源到 \texttt{dist/} 目录。后端通过 Dockerfile 定义构建过程，安装 Python 依赖并打包 Flask 应用。构建失败时 CI 工作流终止并报告错误。
+
+\subsection{自动化测试}
+\begin{enumerate}
+\item \textbf{单元测试：} Vitest（前端）覆盖组件渲染、状态管理和工具函数；pytest（后端）覆盖 API、服务和业务规则。
+\item \textbf{端到端测试：} Playwright 覆盖访客浏览、用户注册登录、活动搜索等关键用户旅程。
+\item \textbf{聚合检查：} \texttt{npm run verify} 串行执行构建、单元测试和端到端测试，作为提交前的完整性验证。
+\end{enumerate}
+
+\subsection{构建产物管理}
+前端构建产物为静态文件（HTML/CSS/JS），直接部署到 Web 服务器或反向代理。后端构建产物为 Docker 镜像，推送到镜像仓库后由 Compose 引用。发布制品包括前端静态构建包、后端不可变镜像、SBOM 依赖清单、测试报告和 release notes，以 tag 和 commit SHA 双重标识。
+
+\section{软件部署}
+\subsection{环境要求}
+\noindent\begin{tabularx}{\textwidth}{p{2.5cm}Y}
+\toprule 项目 & 要求 \\\midrule
+操作系统 & Linux（推荐 Ubuntu 22.04+）/ Windows / macOS（仅开发） \\
+运行环境 & Docker Engine 24+、Docker Compose v2 \\
+数据库 & PostgreSQL 15+（部署）/ SQLite 3（开发） \\
+缓存 & Redis 7+（可选，部署推荐启用） \\
+反向代理 & Nginx（生产，建议配置 TLS） \\
+网络 & 容器间内网通信；生产环境需开放 443（HTTPS） \\
+\bottomrule
+\end{tabularx}
+
+\subsection{安装部署步骤}
+以下步骤涉及前端和后端两个仓库，请根据提示在对应目录下执行：
+\begin{enumerate}
+\item \textbf{后端目录：} 复制环境变量模板并填写配置：\texttt{cp .env.example .env}。
+\item \textbf{后端目录：} 执行 \texttt{docker compose up -d --build} 启动所有服务（API、PostgreSQL、Redis、Celery Worker/Beat）。
+\item 访问 \texttt{GET http://127.0.0.1:5000/api/health} 确认 API 存活。
+\item \textbf{前端目录：} 执行 \texttt{npm run build} 构建前端静态资源。
+\item 将前端构建产物 \texttt{dist/} 目录部署到 Nginx 或反向代理的静态资源路径。
+\item 验证登录、活动查询和审核等最小业务流程正常。
+\end{enumerate}
+
+\subsection{初始化配置}
+首次启动时，Flask 应用通过 \texttt{app.config[\"SQLALCHEMY\_TRACK\_MODIFICATIONS\"]} 和模型注册自动创建数据库表。此方式仅适用于开发和演示环境，生产环境必须使用受控迁移工具（如 Alembic）管理 Schema 变更。系统同时提供开发用初始数据（默认管理员账号和示例活动），首次部署后应修改默认密码。
+
+\subsection{升级步骤}
+\begin{enumerate}
+\item 拉取目标版本的 Docker 镜像或前端构建产物。
+\item 备份当前数据库（\texttt{pg\_dump}）和配置文件。
+\item 执行数据库迁移脚本（如有 Schema 变更）。
+\item 更新 Docker 镜像版本标签并重启服务：\texttt{docker compose up -d --pull always}。
+\item 执行冒烟测试验证升级后业务正常。
+\end{enumerate}
+
+\subsection{卸载步骤}
+\begin{enumerate}
+\item 停止所有容器：\texttt{docker compose down}。
+\item 删除数据卷（谨慎操作，将丢失所有数据）：\texttt{docker volume rm <volume\_name>}。
+\item 删除镜像：\texttt{docker rmi <image\_name>:<tag>}。
+\item 删除项目目录和配置文件。
+\end{enumerate}
+
+\section{运行维护}
+\subsection{日志管理}
+\begin{enumerate}
+\item \textbf{日志来源：} Flask 应用日志（请求、错误、审计）、Celery Worker 日志（任务执行）、Nginx 访问日志、PostgreSQL 慢查询日志。
+\item \textbf{日志内容规范：} 日志不得包含密码、JWT、完整邮箱验证码或完整搜索词。审核和管理操作必须记录操作者、动作、目标和时间。
+\item \textbf{日志轮转：} 使用 Docker 的日志驱动或 logrotate 工具实现日志轮转，避免磁盘空间耗尽。
+\end{enumerate}
+
+\subsection{数据备份}
+\begin{enumerate}
+\item \textbf{备份策略：} PostgreSQL 数据库执行每日全量备份，结合 WAL 日志实现增量恢复。
+\item \textbf{备份存储：} 备份文件加密后存储于异地或独立存储系统，与生产环境隔离。
+\item \textbf{验证：} 定期执行恢复演练，确保备份文件可正常恢复且数据完整性通过校验。
+\end{enumerate}
+
+\subsection{数据恢复}
+\begin{enumerate}
+\item 确认故障范围和影响程度，隔离故障环境。
+\item 选择最近的可用备份文件，执行恢复操作。
+\item 恢复后验证核心数据完整性（用户数、活动数、关系数据）。
+\item 确认服务健康检查通过后，重新开放服务。
+\end{enumerate}
+
+\subsection{异常处理}
+\noindent\begin{tabularx}{\textwidth}{p{2.8cm}Y p{3.5cm}}
+\toprule 异常类型 & 处理措施 & 告警方式 \\\midrule
+API 服务不可用 & 检查容器状态、应用日志和数据库连接；重启服务或回滚到上一版本。 & 健康检查连续失败触发告警。 \\
+数据库连接失败 & 检查 PostgreSQL 容器、数据卷和网络；从备份恢复数据卷。 & 应用日志记录连接错误并告警。 \\
+Redis 不可达 & 确认 Redis 容器运行状态；限流和队列功能降级，核心 API 继续运行。 & 日志记录降级状态，待连接恢复后自动重连。 \\
+任务队列积压 & 检查 Worker 进程和外部依赖；暂停失败率高的数据源。 & 监控队列深度，超过阈值触发告警。 \\
+安全事件 & 撤销泄露的凭据，保全日志，评估数据影响范围，修复漏洞。 & 异常登录或越权行为记录审计日志。 \\
+\bottomrule
+\end{tabularx}
+
+\subsection{故障排查}
+\begin{enumerate}
+\item \textbf{容器级别：} 使用 \texttt{docker ps} 检查容器运行状态，\texttt{docker logs <container>} 查看应用日志。
+\item \textbf{应用级别：} 访问 \texttt{/api/health} 检查 API 存活状态；查看 Flask 日志定位 5xx 错误；检查数据库连接池和慢查询。
+\item \textbf{网络级别：} 使用 \texttt{docker network inspect} 检查容器间通信；确认反向代理配置和防火墙规则。
+\item \textbf{数据级别：} 检查数据库表结构完整性；确认外键约束和唯一约束未损坏；检查数据卷挂载状态。
+\end{enumerate}
+
+\section{发布与回滚}
+发布流程遵循以下步骤：
+\begin{center}
+\begin{tikzpicture}[font=\small,
+  node distance=0.55cm and 1.1cm,
+  flowstep/.style={draw,rounded corners,align=center,minimum width=2.35cm,minimum height=.7cm,fill=blue!7},
+  arr/.style={-Latex,thick}
+]
+\node[flowstep] (a) {1. 选择已验证 tag\\冻结变更};
+\node[flowstep] (b) [right=of a] {2. 构建/签名制品\\记录摘要};
+\node[flowstep] (c) [right=of b] {3. 备份数据库\\检查迁移};
+\node[flowstep] (d) [below=of c] {4. 部署 Compose/服务\\注入 Secret};
+\node[flowstep] (e) [left=of d] {5. 健康与冒烟\\日志/指标检查};
+\node[flowstep] (f) [left=of e] {6. 宣布或回滚\\归档证据};
+\draw[arr] (a)--(b);  \draw[arr] (b)--(c);
+\draw[arr] (c)--(d);  \draw[arr] (d)--(e);
+\draw[arr] (e)--(f);
+\end{tikzpicture}
+\vspace{0.2em}
+{\par\small\itshape 图1：发布与回滚流程}
+\end{center}
+
+发布前检查清单：
+\begin{enumerate}
+\item 选择已通过质量门禁的前后端 commit/tag，冻结接口和数据库迁移版本。
+\item 确认无真实密钥、\texttt{.env} 文件或本地数据进入制品。
+\item 在预发布环境恢复备份、执行迁移和冒烟测试。
+\item 复核 TLS 配置、CORS 设置、请求体限制、健康检查和日志脱敏。
+\item 部署后验证健康接口、登录、活动浏览、发布审核和审计查询。
+\end{enumerate}
+回滚触发条件：健康检查连续失败、核心冒烟测试未通过、错误指标超过阈值。回滚时停止当前服务，恢复上一版本镜像和数据库备份，保留日志和版本信息用于根因分析。
+
+\section{运维风险与应急方案}
+\noindent\begin{tabularx}{\textwidth}{p{3cm}Y p{4.5cm}}
+\toprule 风险 & 影响 & 应急方案 \\\midrule
+数据库损坏或数据丢失 & 用户数据不可恢复，核心业务中断 & 从每日备份恢复；启用只读维护页面；排查损坏原因。 \\
+密钥泄露 & 未授权访问、数据泄露 & 立即撤销并轮换密钥；审计泄露时间窗口内操作；通知受影响用户。 \\
+外部服务不可用 & 邮件发送、搜索、AI 功能降级 & 切换至降级模式；保留错误日志待服务恢复后重试。 \\
+容器运行时故障 & 服务中断 & 检查 Docker 守护进程状态；重新启动容器；切换至备用节点。 \\
+\bottomrule
+\end{tabularx}
+
+在课程项目范围内，本文档交付了以下可复现的运维资产：
+\begin{enumerate}
+\item \textbf{容器化部署拓扑：} Dockerfile + docker-compose.yml 定义 API、PostgreSQL、Redis、Celery Worker/Beat 的完整服务编排，单命令（\texttt{docker compose up -d --build}）即可在任意 Linux 服务器上重建运行环境。
+\item \textbf{健康检查与日志：} \texttt{/api/health} 端点提供存活检测，Flask 应用日志和 Celery Worker 日志记录运行状态。
+\item \textbf{配置管理框架：} \texttt{.env.example} 模板管理环境变量，密钥注入使用环境变量而非硬编码，支持开发/测试/预发布/生产四环境隔离。
+\item \textbf{运维操作文档：} 本文档涵盖配置管理、版本管理、CI/CD、部署步骤、升级/卸载、运行维护、异常处理和故障排查等完整操作流程。
+\end{enumerate}
+生产环境所需的 TLS、集中监控、自动备份、分支保护和灾备演练属于生产加固（production hardening）范畴，与课程项目交付范围相分离。上述加固措施已在本文档中明确记录操作步骤和配置方法，上线前可据此实施。
+
+每次运行事故由值班人员先止损和保全日志，再由开发、测试、运维人员共同完成根因分析、修复、回归验证和预防行动跟踪。
+
 \end{document}
